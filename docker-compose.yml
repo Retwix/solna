@@ -9,8 +9,8 @@ services:
   api:
     build:
       context: ./server
-      dockerfile: Dockerfile
-    env_file: .env.dev
+      dockerfile: dockerfile
+    env_file: ./server/.env.dev
     volumes:
       - ./server:/usr/src/app
       - /usr/src/app/node_modules
@@ -21,15 +21,17 @@ services:
 
   sftp:
     image: atmoz/sftp
-    platform: linux/amd64        # or remove if you’re on amd64
+    platform: linux/amd64 # or remove if you’re on amd64
     volumes:
       - ./local_data:/home/foo/upload:rw
+    ports:
+      - "2222:22"
     command: foo:pass:1001
 
   watcher:
     build:
       context: ./server/scripts
-      dockerfile: Dockerfile
+      dockerfile: dockerfile
     volumes:
       - ./server/scripts:/usr/src/app
       - ./local_data:/home/foo/upload
@@ -41,13 +43,13 @@ services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
-    env_file: .env.frontend
+      dockerfile: dockerfile
+    env_file: ./frontend/.env.frontend
     volumes:
       - ./frontend:/usr/src/app
       - /usr/src/app/node_modules
     ports:
-      - "3001:3000"
+      - "3001:5173"
     depends_on:
       - api
 

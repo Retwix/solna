@@ -1,6 +1,8 @@
-FROM node:16-alpine
+FROM node:18-alpine
 WORKDIR /usr/src/app
 COPY package*.json ./
-RUN npm install
+# Make sure to install dev dependencies as well
+RUN npm install --include=dev
 COPY . .
-CMD ["npm", "start"]
+# Use the build command for production or dev for development
+CMD ["npm", "run", "dev"]
