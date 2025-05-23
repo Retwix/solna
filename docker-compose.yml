@@ -1,0 +1,55 @@
+services:
+  db:
+    image: postgres:14
+    env_file: .env.db
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./server/ingestion-service/migrations:/docker-entrypoint-initdb.d
+
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    env_file: .env.dev
+    volumes:
+      - ./server:/usr/src/app
+      - /usr/src/app/node_modules
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+
+  sftp:
+    image: atmoz/sftp
+    platform: linux/amd64        # or remove if you’re on amd64
+    volumes:
+      - ./local_data:/home/foo/upload:rw
+    command: foo:pass:1001
+
+  watcher:
+    build:
+      context: ./server/scripts
+      dockerfile: Dockerfile
+    volumes:
+      - ./server/scripts:/usr/src/app
+      - ./local_data:/home/foo/upload
+    depends_on:
+      - api
+      - sftp
+    command: ["bash", "inotify-listener.sh", "/home/foo/upload", "http://api:3000"]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    env_file: .env.frontend
+    volumes:
+      - ./frontend:/usr/src/app
+      - /usr/src/app/node_modules
+    ports:
+      - "3001:3000"
+    depends_on:
+      - api
+
+volumes:
+  db-data:

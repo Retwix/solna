@@ -1,0 +1,78 @@
+# Environment files
+.env
+.env.*
+*.env
+
+# Node.js / Frontend
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+.pnpm-debug.log
+dist/
+build/
+coverage/
+.cache/
+.nuxt/
+.next/
+
+# Python / Server
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+.env.*/
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Databases
+local_data/
+*.sqlite
+*.sqlite3
+*.db
+
+# Docker
+.docker/
+docker-volumes/
+
+# IDE and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+.project
+.classpath
+.settings/
+.history/
+
+# macOS specific
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Ansible
+*.retry
+

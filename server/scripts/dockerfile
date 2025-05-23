@@ -1,0 +1,5 @@
+FROM alpine:latest
+RUN apk add --no-cache bash inotify-tools curl
+WORKDIR /usr/src/app
+COPY inotify-listener.sh .
+CMD ["bash", "inotify-listener.sh", "/home/foo/upload", "http://api:3000"]
