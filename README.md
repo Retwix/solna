@@ -1,13 +1,13 @@
 # Solna
 
-A full-stack web application built with React, TypeScript, Express.js, and PostgreSQL. The project includes file monitoring capabilities with SFTP integration and is fully containerized using Docker.
+A full-stack web application built with React, TypeScript, Express.js, and PostgreSQL. The project includes file monitoring capabilities with FTP integration and is fully containerized using Docker.
 
 ## 🚀 Features
 
 - **Frontend**: Modern React application with TypeScript and Vite for fast development
 - **Backend**: Express.js API server with TypeScript support
 - **Database**: PostgreSQL database for data persistence
-- **File Monitoring**: SFTP server with automated file watching and processing
+- **File Monitoring**: FTP server with automated file watching and processing
 - **Containerization**: Complete Docker Compose setup for easy deployment
 - **Hot Reload**: Development environment with hot module replacement
 
@@ -93,6 +93,7 @@ Once the application is running:
 
 - **Frontend**: http://localhost:3001
 - **Backend API**: http://localhost:3000
+- **FTP Server**: localhost:21 (username: foo, password: pass)
 - **Database**: localhost:5432 (if running locally)
 
 ## 📁 Project Structure
@@ -109,7 +110,7 @@ solna/
 │   ├── scripts/             # Utility scripts
 │   ├── package.json         # Server dependencies
 │   └── dockerfile           # Server Docker configuration
-├── local_data/              # SFTP upload directory
+├── local_data/              # FTP upload directory
 ├── docker-compose.yml       # Docker services configuration
 └── README.md               # This file
 ```
@@ -158,6 +159,19 @@ npm start
 The server currently provides:
 
 - `GET /` - Returns "Hello World!" message
+- `POST /file-changed` - Receives file change notifications from the watcher service
+
+### FTP Upload for Cameras
+
+The application includes an FTP server that allows cameras (like Sony cameras) to automatically upload photos. Configure your camera with these settings:
+
+- **Server**: localhost (or your server's IP address)
+- **Port**: 21
+- **Username**: foo
+- **Password**: pass
+- **Upload Directory**: /home/foo/upload (automatically mapped to local_data/ folder)
+
+When files are uploaded via FTP, they are automatically detected by the file watcher service and logged to the database.
 
 ## 🐳 Docker Services
 
@@ -166,5 +180,5 @@ The application consists of several Docker services:
 - **db**: PostgreSQL database
 - **api**: Express.js backend server
 - **frontend**: React frontend application
-- **sftp**: SFTP server for file uploads
+- **ftp**: FTP server for file uploads
 - **watcher**: File monitoring service

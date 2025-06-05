@@ -12,21 +12,33 @@ services:
       dockerfile: dockerfile
     env_file: ./server/.env.dev
     volumes:
-      - ./server:/usr/src/app
-      - /usr/src/app/node_modules
+      - ./server/src:/usr/src/app/src
+      - ./server/package.json:/usr/src/app/package.json
+      - ./server/package-lock.json:/usr/src/app/package-lock.json
+      - ./server/tsconfig.json:/usr/src/app/tsconfig.json
     ports:
       - "3000:3000"
     depends_on:
       - db
 
-  sftp:
-    image: atmoz/sftp
+  ftp:
+    build:
+      context: ./simple-ftp-server
+      dockerfile: Dockerfile
     platform: linux/amd64 # or remove if you’re on amd64
+    environment:
+      - PUBLICHOST=localhost
+      - FTP_USER_NAME=foo
+      - FTP_USER_PASS=pass
+      - FTP_USER_HOME=/home/foo/upload
+      - FTP_USER_UID=1001
+      - FTP_USER_GID=1001
+      - ADDED_FLAGS=-d -d
     volumes:
       - ./local_data:/home/foo/upload:rw
     ports:
-      - "2222:22"
-    command: foo:pass:1001
+      - "21:21"
+      - "30000-30009:30000-30009"
 
   watcher:
     build:
@@ -37,7 +49,7 @@ services:
       - ./local_data:/home/foo/upload
     depends_on:
       - api
-      - sftp
+      - ftp
     command: ["bash", "inotify-listener.sh", "/home/foo/upload", "http://api:3000"]
 
   frontend:

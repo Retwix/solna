@@ -1,4 +1,5 @@
 import express, { Request, Response } from "express";
+import { insertFile } from "./db";
 
 const app = express();
 
@@ -13,13 +14,16 @@ interface FileChangedRequestBody {
   event: string;
 }
 
-app.post("/file-changed", (req: Request<unknown, unknown, FileChangedRequestBody>, res: Response) => {
+app.post("/file-changed", async (req: Request<unknown, unknown, FileChangedRequestBody>, res: Response) => {
   const { file, event } = req.body;
 
-  // TODO: Insert into DB, generate UUID, etc.
-  console.log("File received:", file, "Event:", event);
-
-  res.status(200).send("OK");
+  try {
+    await insertFile(file, event);
+    res.status(200).send("File metadata stored");
+  } catch (err) {
+    console.error("DB insert error:", err);
+    res.status(500).send("Internal Server Error");
+  }
 });
 
 export default app;
