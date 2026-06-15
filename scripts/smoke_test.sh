@@ -11,7 +11,7 @@
 #
 set -euo pipefail
 
-API="${API:-http://localhost:8000}"
+API="${API:-http://localhost:8080}"
 INGEST_KEY="${INGEST_API_KEY:-dev-ingest-key}"
 
 echo "1) Creating an event..."

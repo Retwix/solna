@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: solna
       POSTGRES_DB: solna
     ports:
-      - "5432:5432"
+      - "55432:5432"   # host:container — host remapped to avoid conflicts
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -22,8 +22,8 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # console
+      - "9100:9000"   # S3 API   (host 9100)
+      - "9101:9001"   # console   (host 9101)
     volumes:
       - miniodata:/data
     healthcheck:
@@ -55,7 +55,7 @@ services:
       minio:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "8080:8000"   # API on host 8080
     volumes:
       - ftpdata:/data/ftp
 
@@ -67,20 +67,20 @@ services:
     volumes:
       - ftpdata:/data/ftp
 
-  # vsftpd with virtual users; one user provisioned per event.
-  # Writes uploads into the shared ftpdata volume that the watcher observes.
+  # Solna FTP server: authenticates each login against the events table and
+  # chroots the user into raw/{event_id}. Writes into the shared ftpdata volume
+  # the watcher observes. Set FTP_PASV_ADDRESS in .env to your LAN IP for cameras.
   ftp:
-    image: fauria/vsftpd:latest
-    environment:
-      PASV_ADDRESS: 127.0.0.1
-      PASV_MIN_PORT: 21100
-      PASV_MAX_PORT: 21110
+    build: ./ftpserver
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
-      - "21:21"
-      - "21100-21110:21100-21110"
+      - "2121:21"   # FTP control on host 2121
+      - "21100-21110:21100-21110"   # passive data range
     volumes:
-      - ftpdata:/home/vsftpd
-      - ./ftp/vsftpd.conf:/etc/vsftpd/vsftpd.conf:ro
+      - ftpdata:/data/ftp
 
 volumes:
   pgdata:
