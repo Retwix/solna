@@ -1,5 +1,7 @@
 # Solna — V0 Technical README (MVP)
 
+[![CI](https://github.com/Retwix/solna/actions/workflows/ci.yml/badge.svg)](https://github.com/Retwix/solna/actions/workflows/ci.yml)
+
 The smallest version that proves the core promise: a photographer shoots, photos flow in over FTP, and guests see them almost instantly by scanning a QR code.
 
 V0 has **no facial recognition**. The gallery shows *all* of an event's photos. The build is structured so V1 (faces, selfie matching, styling) drops in without rework — see [`README.technical.md`](./README.technical.md) for the V1 target.
