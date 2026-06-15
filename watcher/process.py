@@ -26,7 +26,8 @@ from watchdog.observers import Observer
 
 FTP_ROOT = os.getenv("FTP_ROOT", "/data/ftp")
 RAW_ROOT = Path(FTP_ROOT) / "raw"
-API_BASE = os.getenv("PUBLIC_BASE_URL", "http://api:8000")
+# Internal API address the watcher posts ingests to (NOT the public gallery URL).
+API_BASE = os.getenv("API_INTERNAL_URL", "http://api:8000")
 INGEST_URL = f"{API_BASE.rstrip('/')}/internal/ingest"
 INGEST_KEY = os.getenv("INGEST_API_KEY", "dev-ingest-key")
 

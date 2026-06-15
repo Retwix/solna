@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
 
+// Base URL of the Solna API. In dev the web app (5173) and API (8000) are
+// separate; in prod set VITE_API_BASE at build time.
+const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+
 // The gallery token is the path: /g/{token}. The QR encodes this URL.
 function tokenFromPath() {
   const m = window.location.pathname.match(/\/g\/([^/]+)/);
@@ -24,7 +28,7 @@ export default function App() {
     let cancelled = false;
 
     async function loadMeta() {
-      const r = await fetch(`/g/${token}`);
+      const r = await fetch(`${API}/g/${token}`);
       if (!r.ok) throw new Error("Gallery not found");
       const m = await r.json();
       setMeta(m);
@@ -33,7 +37,7 @@ export default function App() {
 
     async function poll() {
       try {
-        const url = new URL(`/g/${token}/photos`, window.location.origin);
+        const url = new URL(`/g/${token}/photos`, API);
         if (cursor) url.searchParams.set("since", cursor);
         const r = await fetch(url);
         if (!r.ok) throw new Error("Failed to load photos");
