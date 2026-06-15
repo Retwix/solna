@@ -26,6 +26,8 @@ class Event(Base):
     # High-entropy token that the QR encodes; the gallery is reached via this, never the slug.
     gallery_token: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
     ftp_username: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    # pbkdf2 hash of the per-event FTP password; the FTP server verifies against this.
+    ftp_password_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     # status: active | disabled
     status: Mapped[str] = mapped_column(String, default="active", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

@@ -6,10 +6,11 @@ from sqlalchemy.orm import Session
 
 from config import get_settings
 from database import get_db
-from ftp_provision import provision_event_ftp
+from ftp_provision import ensure_event_intake_dir
 from models import Event
 from qr import qr_png_base64
 from schemas import EventCreate, EventCreated, FtpCredentials
+from security import hash_password
 
 router = APIRouter(prefix="/events", tags=["events"])
 settings = get_settings()
@@ -25,20 +26,22 @@ def create_event(payload: EventCreate, db: Session = Depends(get_db)):
     slug = _slugify(payload.name)
     gallery_token = secrets.token_urlsafe(settings.gallery_token_bytes)
     ftp_username = f"sol_{secrets.token_hex(4)}"
+    # Generated once and returned in plaintext here; only the hash is stored.
+    ftp_password = secrets.token_urlsafe(12)
 
     event = Event(
         name=payload.name,
         slug=slug,
         gallery_token=gallery_token,
         ftp_username=ftp_username,
+        ftp_password_hash=hash_password(ftp_password),
     )
     db.add(event)
     db.commit()
     db.refresh(event)
 
-    # Provision the per-event FTP user. Its home maps to raw/{event_id}/ so uploads
-    # land exactly where the watcher looks. Returns the generated password.
-    ftp_password = provision_event_ftp(event.id, ftp_username)
+    # Its intake dir maps to raw/{event_id}/ so uploads land where the watcher looks.
+    ensure_event_intake_dir(event.id)
 
     gallery_url = f"{settings.public_base_url.rstrip('/')}/g/{gallery_token}"
 
