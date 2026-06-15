@@ -1,0 +1,99 @@
+"""Solna FTP server (V0).
+
+A small pyftpdlib server that authenticates each login against the Solna
+`events` table: the FTP username/password returned at event creation. On a
+successful login the user is chrooted into that event's intake directory
+(raw/{event_id}), so uploads land exactly where the watcher observes and one
+photographer can only ever write to their own event.
+
+Cameras connect with: host = your machine's LAN IP, port 2121, and the
+credentials from the event-creation response. FTP_PASV_ADDRESS must be that
+same LAN IP so passive-mode data transfers work from a separate device.
+"""
+import os
+from pathlib import Path
+
+import psycopg
+from pyftpdlib.authorizers import AuthenticationFailed
+from pyftpdlib.handlers import FTPHandler
+from pyftpdlib.servers import FTPServer
+
+from passwords import verify_password
+
+# psycopg wants a plain libpq URL (strip the SQLAlchemy +psycopg dialect tag).
+DATABASE_URL = os.environ["DATABASE_URL"].replace("postgresql+psycopg://", "postgresql://")
+FTP_ROOT = os.getenv("FTP_ROOT", "/data/ftp")
+PASV_ADDRESS = os.getenv("FTP_PASV_ADDRESS", "")
+PASV_MIN = int(os.getenv("FTP_PASV_MIN_PORT", "21100"))
+PASV_MAX = int(os.getenv("FTP_PASV_MAX_PORT", "21110"))
+FULL_PERMS = "elradfmwMT"
+
+
+class EventAuthorizer:
+    """pyftpdlib authorizer backed by the events table."""
+
+    def __init__(self):
+        self._homes: dict[str, str] = {}
+
+    def _lookup(self, username: str):
+        with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, ftp_password_hash, status FROM events WHERE ftp_username = %s",
+                (username,),
+            )
+            return cur.fetchone()
+
+    def validate_authentication(self, username, password, handler):
+        row = self._lookup(username)
+        if not row:
+            raise AuthenticationFailed("authentication failed")
+        event_id, pw_hash, status = row
+        if status != "active" or not pw_hash or not verify_password(password, pw_hash):
+            raise AuthenticationFailed("authentication failed")
+
+        home = Path(FTP_ROOT) / "raw" / event_id
+        home.mkdir(parents=True, exist_ok=True)
+        self._homes[username] = str(home)
+
+    def get_home_dir(self, username):
+        return self._homes[username]
+
+    # The remaining methods complete pyftpdlib's authorizer contract.
+    def has_user(self, username):
+        return True
+
+    def has_perm(self, username, perm, path=None):
+        return perm in FULL_PERMS
+
+    def get_perms(self, username):
+        return FULL_PERMS
+
+    def get_msg_login(self, username):
+        return "Solna FTP ready — upload your photos."
+
+    def get_msg_quit(self, username):
+        return "Goodbye."
+
+    def impersonate_user(self, username, password):
+        pass
+
+    def terminate_impersonation(self, username):
+        pass
+
+
+def main():
+    handler = FTPHandler
+    handler.authorizer = EventAuthorizer()
+    handler.passive_ports = range(PASV_MIN, PASV_MAX + 1)
+    if PASV_ADDRESS:
+        # Address advertised to clients for passive connections (your LAN IP).
+        handler.masquerade_address = PASV_ADDRESS
+
+    server = FTPServer(("0.0.0.0", 21), handler)
+    print(f"[ftpserver] listening on :21  passive={PASV_MIN}-{PASV_MAX}  "
+          f"masquerade={PASV_ADDRESS or '(none)'}")
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()
