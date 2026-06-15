@@ -1,0 +1,88 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: solna
+      POSTGRES_PASSWORD: solna
+      POSTGRES_DB: solna
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U solna"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # console
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Creates the bucket on startup and makes it publicly readable (V0: public gallery).
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb -p local/solna-media || true &&
+      mc anonymous set download local/solna-media &&
+      echo 'bucket ready'
+      "
+
+  api:
+    build: ./api
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ftpdata:/data/ftp
+
+  watcher:
+    build: ./watcher
+    env_file: .env
+    depends_on:
+      - api
+    volumes:
+      - ftpdata:/data/ftp
+
+  # vsftpd with virtual users; one user provisioned per event.
+  # Writes uploads into the shared ftpdata volume that the watcher observes.
+  ftp:
+    image: fauria/vsftpd:latest
+    environment:
+      PASV_ADDRESS: 127.0.0.1
+      PASV_MIN_PORT: 21100
+      PASV_MAX_PORT: 21110
+    ports:
+      - "21:21"
+      - "21100-21110:21100-21110"
+    volumes:
+      - ftpdata:/home/vsftpd
+      - ./ftp/vsftpd.conf:/etc/vsftpd/vsftpd.conf:ro
+
+volumes:
+  pgdata:
+  miniodata:
+  ftpdata:
