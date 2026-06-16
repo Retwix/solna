@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     ftp_port: int = 21
     ftp_root: str = "/data/ftp"
 
+    # Face matching (V1)
+    face_service_url: str = "http://faceservice:9000"
+    # Cosine similarity in [-1,1]; >= this counts as a match. Tune on real photos.
+    match_similarity_threshold: float = 0.35
+
 
 @lru_cache
 def get_settings() -> Settings:

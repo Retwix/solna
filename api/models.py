@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -42,9 +42,45 @@ class Photo(Base):
     event_id: Mapped[str] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
     s3_raw_key: Mapped[str] = mapped_column(String, nullable=False)
     s3_thumb_key: Mapped[str | None] = mapped_column(String, nullable=True)
-    # status: ready (V0). V1 will add: processing | failed while faces are computed.
+    # status: ready | processing | failed
     status: Mapped[str] = mapped_column(String, default="ready", nullable=False)
+    # number of faces detected in this photo (denormalized for quick display)
+    face_count: Mapped[int] = mapped_column(default=0, nullable=False)
     shot_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     event: Mapped["Event"] = relationship(back_populates="photos")
+    faces: Mapped[list["Face"]] = relationship(back_populates="photo", cascade="all, delete-orphan")
+
+
+class Face(Base):
+    """One detected face in a photo, with its embedding.
+
+    V1 stores the 512-d embedding as JSON text so matching works on any DB
+    (SQLite in tests, Postgres in dev). Switching to pgvector for large-scale
+    nearest-neighbour search is a later, isolated optimization.
+    """
+    __tablename__ = "faces"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    photo_id: Mapped[str] = mapped_column(ForeignKey("photos.id", ondelete="CASCADE"), index=True)
+    # denormalized so we can load all faces for an event in one query at match time
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
+    embedding: Mapped[str] = mapped_column(Text, nullable=False)  # JSON list[float], L2-normalized
+    bbox: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON [x1,y1,x2,y2]
+    det_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    photo: Mapped["Photo"] = relationship(back_populates="faces")
+
+
+class Guest(Base):
+    """A guest who took a selfie to find their photos for an event."""
+    __tablename__ = "guests"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
+    email: Mapped[str] = mapped_column(String, nullable=False)
+    selfie_embedding: Mapped[str] = mapped_column(Text, nullable=False)  # JSON list[float]
+    match_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
