@@ -1,16 +1,14 @@
-"""Solna V0 watcher.
+"""Solna watcher.
 
 Observes the FTP intake directory ({FTP_ROOT}/raw/{event_id}/...). For each new
 image it:
   1. uploads the original to storage at raw/{event_id}/<name>
   2. generates a thumbnail and uploads it to thumbs/{event_id}/<name>
-  3. notifies the API (/internal/ingest) so the photo shows up in the gallery
+  3. (V1) calls the face service to detect + embed faces
+  4. notifies the API (/internal/ingest) with the photo keys and any faces
 
->>> V1 HOOK <<<
-This is the single place V1 inserts work. After the thumbnail step, V1 will:
-  detect faces -> embed each face -> assign cluster -> apply LUT/preset,
-  then persist faces alongside the photo. The intake path and the API contract
-  do not change; only `process_image` grows.
+Faces are embedded here, on ingest, and stored against the photo. Matching a
+specific guest happens later (at selfie time) against these stored embeddings.
 """
 import io
 import os
@@ -30,6 +28,7 @@ RAW_ROOT = Path(FTP_ROOT) / "raw"
 API_BASE = os.getenv("API_INTERNAL_URL", "http://api:8000")
 INGEST_URL = f"{API_BASE.rstrip('/')}/internal/ingest"
 INGEST_KEY = os.getenv("INGEST_API_KEY", "dev-ingest-key")
+FACE_SERVICE_URL = os.getenv("FACE_SERVICE_URL", "http://faceservice:9000")
 
 S3_BUCKET = os.getenv("S3_BUCKET", "solna-media")
 THUMB_MAX = 800  # longest edge, px
@@ -86,16 +85,37 @@ def process_image(path: Path) -> None:
         print(f"[watcher] thumbnail failed for {name}: {e}")
         thumb_key = None
 
-    # --- V1 face pipeline would go here (detect -> embed -> cluster -> style) ---
+    # V1: detect + embed faces via the face service. A failure here must not
+    # drop the photo — it still belongs in the gallery, just without matches.
+    faces = _embed_faces(data, name)
 
     resp = requests.post(
         INGEST_URL,
-        json={"event_id": event_id, "s3_raw_key": raw_key, "s3_thumb_key": thumb_key},
+        json={
+            "event_id": event_id,
+            "s3_raw_key": raw_key,
+            "s3_thumb_key": thumb_key,
+            "faces": faces,
+        },
         headers={"X-Ingest-Key": INGEST_KEY},
-        timeout=15,
+        timeout=30,
     )
     resp.raise_for_status()
-    print(f"[watcher] ingested {raw_key}")
+    print(f"[watcher] ingested {raw_key} ({len(faces)} face(s))")
+
+
+def _embed_faces(data: bytes, name: str) -> list:
+    try:
+        resp = requests.post(
+            f"{FACE_SERVICE_URL.rstrip('/')}/embed",
+            files={"file": (name, data, "application/octet-stream")},
+            timeout=60,
+        )
+        resp.raise_for_status()
+        return resp.json().get("faces", [])
+    except Exception as e:  # noqa: BLE001
+        print(f"[watcher] face embedding failed for {name}: {e}")
+        return []
 
 
 def _is_image(path: Path) -> bool:

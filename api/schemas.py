@@ -42,8 +42,25 @@ class PhotoPage(BaseModel):
     cursor: str | None  # pass back as ?since= to fetch only newer photos
 
 
+class FaceIn(BaseModel):
+    embedding: list[float]
+    bbox: list[float] | None = None
+    det_score: float | None = None
+
+
 class IngestIn(BaseModel):
     event_id: str
     s3_raw_key: str
     s3_thumb_key: str | None = None
     shot_at: datetime | None = None
+    faces: list[FaceIn] = []
+
+
+class MatchRequestMeta(BaseModel):
+    email: str
+
+
+class MatchResult(BaseModel):
+    photos: list[PhotoOut]
+    match_count: int
+    faces_detected: int
