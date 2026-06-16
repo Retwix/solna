@@ -101,3 +101,26 @@ body {
 .kv code { background: #0f0f14; padding: 2px 6px; border-radius: 5px; }
 
 .err { color: #ff7a7a; }
+
+/* --- Guest selfie / match --- */
+.selfie {
+  width: 100%;
+  max-width: 360px;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 12px;
+  background: #0f0f14;
+  align-self: center;
+  transform: scaleX(-1); /* mirror, like a front camera */
+}
+.btn.ghost {
+  background: transparent;
+  border: 1px solid #2c2c36;
+  color: var(--fg);
+}
+.upload {
+  text-align: center;
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: 0.9rem;
+}
