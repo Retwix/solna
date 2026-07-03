@@ -64,8 +64,20 @@ services:
     env_file: .env
     depends_on:
       - api
+      - faceservice
     volumes:
       - ftpdata:/data/ftp
+
+  # Facial recognition (V1): detect + embed faces. Both the watcher (on ingest)
+  # and the API (on guest selfie) call it. Set FACE_ENGINE=fake in .env to run
+  # the whole pipeline without downloading the InsightFace model.
+  faceservice:
+    build: ./faceservice
+    env_file: .env
+    ports:
+      - "9200:9000"   # face service on host 9200 (debugging)
+    volumes:
+      - facemodels:/root/.insightface   # cache the downloaded model across restarts
 
   # Solna FTP server: authenticates each login against the events table and
   # chroots the user into raw/{event_id}. Writes into the shared ftpdata volume
@@ -86,3 +98,4 @@ volumes:
   pgdata:
   miniodata:
   ftpdata:
+  facemodels:

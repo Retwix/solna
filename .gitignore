@@ -25,3 +25,4 @@ ftpdata/
 .DS_Store
 .idea/
 .vscode/
+.tool-versions

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 #
-# End-to-end smoke test for Solna V0.
+# End-to-end smoke test for Solna.
 #
 # Exercises the full pipe WITHOUT a camera:
-#   create event -> drop a photo into the event's FTP intake dir
+#   create photographer -> create event -> go live
+#   -> drop a photo into the photographer's FTP intake dir
 #   -> watcher thumbnails + ingests -> photo shows up in the gallery API.
 #
 # Prereqs: `docker compose up --build` is running.
@@ -14,10 +15,17 @@ set -euo pipefail
 API="${API:-http://localhost:8080}"
 INGEST_KEY="${INGEST_API_KEY:-dev-ingest-key}"
 
-echo "1) Creating an event..."
+echo "1) Creating a photographer account..."
+PHOTOGRAPHER_JSON="$(curl -fsS -X POST "$API/photographers" \
+  -H 'content-type: application/json' \
+  -d '{"name":"Smoke Test Photographer"}')"
+PHOTOGRAPHER_ID="$(python3 -c 'import json,sys;print(json.loads(sys.argv[1])["id"])' "$PHOTOGRAPHER_JSON")"
+echo "   photographer_id = $PHOTOGRAPHER_ID"
+
+echo "2) Creating an event and going live..."
 EVENT_JSON="$(curl -fsS -X POST "$API/events" \
   -H 'content-type: application/json' \
-  -d '{"name":"Smoke Test Event"}')"
+  -d "{\"name\":\"Smoke Test Event\",\"photographer_id\":\"$PHOTOGRAPHER_ID\"}")"
 
 read -r EVENT_ID TOKEN GALLERY_URL <<EOF
 $(python3 - "$EVENT_JSON" <<'PY'
@@ -28,22 +36,23 @@ PY
 )
 EOF
 
-echo "   event_id   = $EVENT_ID"
+curl -fsS -X POST "$API/events/$EVENT_ID/go-live" > /dev/null
+echo "   event_id   = $EVENT_ID (live)"
 echo "   gallery    = $GALLERY_URL"
 
-echo "2) Dropping a test photo into the event's FTP intake dir..."
+echo "3) Dropping a test photo into the photographer's FTP intake dir..."
 # Generate a JPEG straight into the shared volume the watcher observes.
-docker compose exec -T watcher python - "$EVENT_ID" <<'PY'
+docker compose exec -T watcher python - "$PHOTOGRAPHER_ID" <<'PY'
 import os, sys
 from PIL import Image
-event_id = sys.argv[1]
-d = f"/data/ftp/raw/{event_id}"
+photographer_id = sys.argv[1]
+d = f"/data/ftp/raw/{photographer_id}"
 os.makedirs(d, exist_ok=True)
 Image.new("RGB", (1600, 1200), (90, 140, 200)).save(f"{d}/smoke-1.jpg", "JPEG")
 print("dropped", f"{d}/smoke-1.jpg")
 PY
 
-echo "3) Waiting for the photo to appear in the gallery..."
+echo "4) Waiting for the photo to appear in the gallery..."
 for i in $(seq 1 20); do
   COUNT="$(curl -fsS "$API/g/$TOKEN/photos" \
     | python3 -c 'import json,sys;print(len(json.load(sys.stdin)["photos"]))')"

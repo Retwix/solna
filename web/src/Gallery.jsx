@@ -1,74 +1,111 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { API } from "./api.js";
+import Match from "./Match.jsx";
 
-// Live gallery for one event, keyed by the token in the URL (/g/{token}).
+// Guest gallery for one event (/g/{token}). Flow:
+//   1. load event meta
+//   2. guest takes a selfie + email -> /match (once)
+//   3. show the personal gallery of photos they appear in
+// The guest_token from /match is kept in localStorage, so a refresh or
+// revisit re-fetches the current matches (including newer photos) without
+// retaking the selfie.
 export default function Gallery({ token }) {
+  const storageKey = `solna.guest.${token}`;
   const [meta, setMeta] = useState(null);
-  const [photos, setPhotos] = useState([]);
   const [error, setError] = useState(null);
+  const [result, setResult] = useState(null); // match result: { photos, match_count, guest_token }
+  const [restoring, setRestoring] = useState(() => !!localStorage.getItem(storageKey));
 
   useEffect(() => {
-    let cursor = null;
-    let pollMs = 3000;
-    let timer;
-    let cancelled = false;
-
-    async function loadMeta() {
-      const r = await fetch(`${API}/g/${token}`);
-      if (!r.ok) throw new Error("Gallery not found");
-      const m = await r.json();
-      setMeta(m);
-      pollMs = m.poll_interval_ms || 3000;
-    }
-
-    async function poll() {
-      try {
-        const url = new URL(`/g/${token}/photos`, API);
-        if (cursor) url.searchParams.set("since", cursor);
-        const r = await fetch(url);
-        if (!r.ok) throw new Error("Failed to load photos");
-        const page = await r.json();
-        if (page.photos.length) {
-          setPhotos((prev) => [...page.photos.slice().reverse(), ...prev]);
-          cursor = page.cursor;
-        }
-      } catch (e) {
-        // keep polling; transient errors are expected during an event
-        console.warn(e);
-      } finally {
-        if (!cancelled) timer = setTimeout(poll, pollMs);
-      }
-    }
-
-    loadMeta()
-      .then(poll)
+    fetch(`${API}/g/${token}`)
+      .then((r) => {
+        if (!r.ok) throw new Error("Gallery not found");
+        return r.json();
+      })
+      .then(setMeta)
       .catch((e) => setError(e.message));
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
   }, [token]);
 
+  // Returning guest: re-open the matched gallery from the stored token.
+  useEffect(() => {
+    const guestToken = localStorage.getItem(storageKey);
+    if (!guestToken) return;
+    fetch(`${API}/g/${token}/matches?guest=${encodeURIComponent(guestToken)}`)
+      .then((r) => {
+        if (!r.ok) throw new Error();
+        return r.json();
+      })
+      .then(setResult)
+      .catch(() => localStorage.removeItem(storageKey)) // stale token -> selfie screen
+      .finally(() => setRestoring(false));
+  }, [token, storageKey]);
+
+  const onMatched = useCallback(
+    (res) => {
+      localStorage.setItem(storageKey, res.guest_token);
+      setResult(res);
+    },
+    [storageKey]
+  );
+
+  function searchAgain() {
+    localStorage.removeItem(storageKey);
+    setResult(null);
+  }
+
+  function refresh() {
+    const guestToken = localStorage.getItem(storageKey);
+    if (!guestToken) return;
+    fetch(`${API}/g/${token}/matches?guest=${encodeURIComponent(guestToken)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((res) => res && setResult(res));
+  }
+
   if (error) return <div className="center muted">{error}</div>;
+  if (!meta || restoring) return <div className="center muted">Loading…</div>;
+
+  if (!result) {
+    return <Match token={token} eventName={meta.name} onMatched={onMatched} />;
+  }
 
   return (
     <div className="app">
       <header className="header">
-        <h1>{meta?.name ?? "Solna"}</h1>
-        <span className="count">{photos.length || meta?.photo_count || 0} photos · live</span>
+        <h1>{meta.name}</h1>
+        <span className="count">
+          {result.match_count} photo{result.match_count === 1 ? "" : "s"} of you
+        </span>
       </header>
 
-      {photos.length === 0 ? (
-        <div className="center muted">Waiting for the first photos…</div>
-      ) : (
-        <div className="grid">
-          {photos.map((p) => (
-            <a key={p.id} className="cell" href={p.url} target="_blank" rel="noreferrer">
-              <img src={p.thumb_url || p.url} loading="lazy" alt="" />
-            </a>
-          ))}
+      {result.photos.length === 0 ? (
+        <div className="center muted">
+          No matches yet. More photos may still be arriving.
+          <br />
+          <button className="btn" style={{ marginTop: 16 }} onClick={refresh}>
+            Check again
+          </button>
+          <button className="btn ghost" style={{ marginTop: 8 }} onClick={searchAgain}>
+            Try another selfie
+          </button>
         </div>
+      ) : (
+        <>
+          <div className="grid">
+            {result.photos.map((p) => (
+              <a key={p.id} className="cell" href={p.url} target="_blank" rel="noreferrer">
+                <img src={p.thumb_url || p.url} loading="lazy" alt="" />
+              </a>
+            ))}
+          </div>
+          <div className="center">
+            <button className="btn" onClick={refresh}>
+              Check for new photos
+            </button>
+            <button className="btn ghost" style={{ marginLeft: 8 }} onClick={searchAgain}>
+              Not you? Search again
+            </button>
+          </div>
+        </>
       )}
     </div>
   );

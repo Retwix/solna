@@ -41,22 +41,46 @@ def client():
 
 
 @pytest.fixture()
-def make_event(client):
-    """Create an event and return its API payload."""
-    def _make(name="Summer Wedding"):
-        resp = client.post("/events", json={"name": name})
+def make_photographer(client):
+    """Create a photographer account (the stable FTP identity)."""
+    def _make(name="Ana Lens"):
+        resp = client.post("/photographers", json={"name": name})
         assert resp.status_code == 201, resp.text
         return resp.json()
 
     return _make
 
 
-def ingest_photo(client, event_id, name="shot.jpg"):
-    """Helper: register a photo the way the watcher would."""
+@pytest.fixture()
+def make_event(client, make_photographer):
+    """Create a photographer + event and go live, so ingested photos land in
+    this event (the common case most tests need). Returns the event payload
+    with the photographer attached under "photographer"."""
+    def _make(name="Summer Wedding", photographer=None, live=True):
+        photographer = photographer or make_photographer(f"{name} Photographer")
+        resp = client.post(
+            "/events", json={"name": name, "photographer_id": photographer["id"]}
+        )
+        assert resp.status_code == 201, resp.text
+        event = resp.json()
+        if live:
+            r = client.post(f"/events/{event['id']}/go-live")
+            assert r.status_code == 200, r.text
+        event["photographer"] = photographer
+        return event
+
+    return _make
+
+
+def ingest_photo(client, photographer_id, name="shot.jpg", faces=None):
+    """Helper: register a photo the way the watcher would (per photographer;
+    the API resolves the active event)."""
     return client.post(
         "/internal/ingest",
-        json={"event_id": event_id, "s3_raw_key": f"raw/{event_id}/{name}",
-              "s3_thumb_key": f"thumbs/{event_id}/{name}"},
+        json={"photographer_id": photographer_id,
+              "s3_raw_key": f"raw/{photographer_id}/{name}",
+              "s3_thumb_key": f"thumbs/{photographer_id}/{name}",
+              "faces": faces or []},
         headers={"X-Ingest-Key": INGEST_KEY},
     )
 

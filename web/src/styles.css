@@ -101,3 +101,48 @@ body {
 .kv code { background: #0f0f14; padding: 2px 6px; border-radius: 5px; }
 
 .err { color: #ff7a7a; }
+
+.panel-notice {
+  max-width: 520px;
+  margin: 16px auto -24px;
+  padding: 0 16px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+.badge.live { background: #1f7a3d; color: #d9ffe6; }
+
+/* --- Guest selfie / match --- */
+.selfie {
+  width: 100%;
+  max-width: 360px;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 12px;
+  background: #0f0f14;
+  align-self: center;
+  transform: scaleX(-1); /* mirror, like a front camera */
+}
+.btn.ghost {
+  background: transparent;
+  border: 1px solid #2c2c36;
+  color: var(--fg);
+}
+.upload {
+  text-align: center;
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: 0.9rem;
+}

@@ -1,11 +1,10 @@
-"""Behaviour: FTP credentials issued at event creation can be authenticated.
+"""Behaviour: FTP credentials issued at photographer creation can be authenticated.
 
 These cover the contract the FTP server relies on (api/security.py hashing),
 without needing the FTP server itself running.
 """
 from sqlalchemy import select
 
-from conftest import token_from_gallery_url  # noqa: F401  (kept for symmetry)
 from security import hash_password, verify_password
 
 
@@ -22,21 +21,21 @@ def test_each_hash_is_salted_and_unique():
     assert hash_password("same") != hash_password("same")
 
 
-def test_event_creation_stores_a_verifiable_ftp_password(client, make_event):
-    """The plaintext FTP password returned to the photographer verifies against
-    the hash stored on the event — the exact check the FTP server performs."""
+def test_photographer_creation_stores_a_verifiable_ftp_password(client, make_photographer):
+    """The plaintext FTP password returned once at account creation verifies
+    against the stored hash — the exact check the FTP server performs."""
     from database import SessionLocal
-    from models import Event
+    from models import Photographer
 
-    data = make_event("FTP Auth Event")
+    data = make_photographer("FTP Auth Account")
     plaintext = data["ftp"]["password"]
 
     db = SessionLocal()
     try:
-        event = db.scalar(select(Event).where(Event.id == data["id"]))
-        assert event.ftp_password_hash  # only the hash is persisted
-        assert event.ftp_password_hash != plaintext
-        assert verify_password(plaintext, event.ftp_password_hash)
-        assert not verify_password("wrong-password", event.ftp_password_hash)
+        p = db.scalar(select(Photographer).where(Photographer.id == data["id"]))
+        assert p.ftp_password_hash  # only the hash is persisted
+        assert p.ftp_password_hash != plaintext
+        assert verify_password(plaintext, p.ftp_password_hash)
+        assert not verify_password("wrong-password", p.ftp_password_hash)
     finally:
         db.close()
