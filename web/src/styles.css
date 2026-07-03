@@ -102,6 +102,12 @@ body {
 
 .err { color: #ff7a7a; }
 
+.panel-notice {
+  max-width: 520px;
+  margin: 16px auto -24px;
+  padding: 0 16px;
+}
+
 .row {
   display: flex;
   align-items: center;

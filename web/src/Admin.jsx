@@ -149,7 +149,7 @@ function EventCard({ event, isLive, onGoLive, onStop, onClaim, trayCount }) {
   );
 }
 
-function Dashboard({ photographer, events, onAddEvent }) {
+function Dashboard({ photographer, events, onAddEvent, onAccountGone }) {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -159,11 +159,17 @@ function Dashboard({ photographer, events, onAddEvent }) {
   const refreshTray = useCallback(async () => {
     try {
       const r = await fetch(`${API}/photographers/${photographer.id}/unassigned`);
+      if (r.status === 404) {
+        // The server no longer knows this account (e.g. the dev DB was
+        // reset). Don't fail silently — drop the stale state and restart setup.
+        onAccountGone();
+        return;
+      }
       if (r.ok) setTray((await r.json()).photos);
     } catch {
-      /* tray is advisory; ignore fetch hiccups */
+      /* tray is advisory; ignore fetch hiccups (API down != account gone) */
     }
-  }, [photographer.id]);
+  }, [photographer.id, onAccountGone]);
 
   useEffect(() => {
     refreshTray();
@@ -248,23 +254,37 @@ function Dashboard({ photographer, events, onAddEvent }) {
 
 export default function Admin() {
   const [state, setState] = useState(loadState);
+  const [notice, setNotice] = useState(null);
 
   function update(next) {
     setState(next);
     saveState(next);
   }
 
+  const onAccountGone = useCallback(() => {
+    localStorage.removeItem(LS_KEY);
+    setState({});
+    setNotice(
+      "This account no longer exists on the server (was the database reset?). " +
+      "Create a new one — the camera will need the new FTP credentials."
+    );
+  }, []);
+
   if (!state.photographer) {
     return (
-      <CreateAccount
-        onCreated={(account) =>
-          // Deliberately drop the plaintext password before persisting.
-          update({
-            photographer: { id: account.id, name: account.name },
-            events: [],
-          })
-        }
-      />
+      <>
+        {notice && <p className="err panel-notice">{notice}</p>}
+        <CreateAccount
+          onCreated={(account) => {
+            setNotice(null);
+            // Deliberately drop the plaintext password before persisting.
+            update({
+              photographer: { id: account.id, name: account.name },
+              events: [],
+            });
+          }}
+        />
+      </>
     );
   }
 
@@ -273,6 +293,7 @@ export default function Admin() {
       photographer={state.photographer}
       events={state.events || []}
       onAddEvent={(event) => update({ ...state, events: [...(state.events || []), event] })}
+      onAccountGone={onAccountGone}
     />
   );
 }
