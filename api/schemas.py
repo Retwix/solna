@@ -92,3 +92,6 @@ class MatchResult(BaseModel):
     photos: list[PhotoOut]
     match_count: int
     faces_detected: int
+    # Store this in the browser: GET /g/{token}/matches?guest= re-opens the
+    # matched gallery (with any newer photos) without a new selfie.
+    guest_token: str

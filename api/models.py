@@ -111,6 +111,9 @@ class Guest(Base):
     __tablename__ = "guests"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uuid)
+    # High-entropy token returned to the guest's browser so they can re-open
+    # their matched gallery (refresh/revisit) without retaking the selfie.
+    token: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
     event_id: Mapped[str] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
     email: Mapped[str] = mapped_column(String, nullable=False)
     selfie_embedding: Mapped[str] = mapped_column(Text, nullable=False)  # JSON list[float]

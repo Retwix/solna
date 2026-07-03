@@ -90,6 +90,64 @@ def test_match_persists_the_guest(client, make_event, monkeypatch):
         db.close()
 
 
+def test_returning_guest_refetches_matches_without_a_new_selfie(client, make_event, monkeypatch):
+    """The match response carries a guest token; GET /g/{token}/matches?guest=
+    returns the CURRENT matches — including photos that arrived after the
+    selfie — so a page refresh (or revisit) never forces a retake."""
+    import face_client
+
+    event = make_event("Returning Guest Event")
+    token = token_from_gallery_url(event["gallery_url"])
+    _ingest(client, event, "me-1.jpg", [[1.0, 0.0, 0.0]])
+
+    monkeypatch.setattr(
+        face_client, "embed_image",
+        lambda data, filename="selfie.jpg": [{"embedding": [1.0, 0.0, 0.0], "det_score": 1.0}],
+    )
+    first = client.post(
+        f"/g/{token}/match",
+        data={"email": "guest@example.com"},
+        files={"file": ("selfie.jpg", b"x", "image/jpeg")},
+    ).json()
+    guest_token = first["guest_token"]
+    assert guest_token
+
+    # More photos arrive after the selfie: one of me, one of someone else.
+    _ingest(client, event, "me-2.jpg", [[0.99, 0.1, 0.0]])
+    _ingest(client, event, "other.jpg", [[0.0, 1.0, 0.0]])
+
+    r = client.get(f"/g/{token}/matches", params={"guest": guest_token})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["match_count"] == 2
+    names = sorted(p["url"].rsplit("/", 1)[1] for p in body["photos"])
+    assert names == ["me-1.jpg", "me-2.jpg"]
+
+
+def test_guest_token_is_scoped_and_unguessable(client, make_event, monkeypatch):
+    """A wrong guest token 404s; a valid token from ANOTHER event 404s too."""
+    import face_client
+
+    event_a = make_event("Event A")
+    event_b = make_event("Event B")
+    token_a = token_from_gallery_url(event_a["gallery_url"])
+    token_b = token_from_gallery_url(event_b["gallery_url"])
+    _ingest(client, event_a, "me.jpg", [[1.0, 0.0, 0.0]])
+
+    monkeypatch.setattr(
+        face_client, "embed_image",
+        lambda data, filename="selfie.jpg": [{"embedding": [1.0, 0.0, 0.0], "det_score": 1.0}],
+    )
+    guest_token = client.post(
+        f"/g/{token_a}/match",
+        data={"email": "guest@example.com"},
+        files={"file": ("selfie.jpg", b"x", "image/jpeg")},
+    ).json()["guest_token"]
+
+    assert client.get(f"/g/{token_a}/matches", params={"guest": "nope"}).status_code == 404
+    assert client.get(f"/g/{token_b}/matches", params={"guest": guest_token}).status_code == 404
+
+
 def test_match_rejects_selfie_with_no_face(client, make_event, monkeypatch):
     """If no face is detected in the selfie, the guest gets a clear 422."""
     import face_client

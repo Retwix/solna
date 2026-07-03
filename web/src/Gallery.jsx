@@ -1,15 +1,20 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { API } from "./api.js";
 import Match from "./Match.jsx";
 
-// Guest gallery for one event (/g/{token}). V1 flow:
+// Guest gallery for one event (/g/{token}). Flow:
 //   1. load event meta
-//   2. guest takes a selfie + email -> /match
+//   2. guest takes a selfie + email -> /match (once)
 //   3. show the personal gallery of photos they appear in
+// The guest_token from /match is kept in localStorage, so a refresh or
+// revisit re-fetches the current matches (including newer photos) without
+// retaking the selfie.
 export default function Gallery({ token }) {
+  const storageKey = `solna.guest.${token}`;
   const [meta, setMeta] = useState(null);
   const [error, setError] = useState(null);
-  const [result, setResult] = useState(null); // match result: { photos, match_count }
+  const [result, setResult] = useState(null); // match result: { photos, match_count, guest_token }
+  const [restoring, setRestoring] = useState(() => !!localStorage.getItem(storageKey));
 
   useEffect(() => {
     fetch(`${API}/g/${token}`)
@@ -21,11 +26,46 @@ export default function Gallery({ token }) {
       .catch((e) => setError(e.message));
   }, [token]);
 
+  // Returning guest: re-open the matched gallery from the stored token.
+  useEffect(() => {
+    const guestToken = localStorage.getItem(storageKey);
+    if (!guestToken) return;
+    fetch(`${API}/g/${token}/matches?guest=${encodeURIComponent(guestToken)}`)
+      .then((r) => {
+        if (!r.ok) throw new Error();
+        return r.json();
+      })
+      .then(setResult)
+      .catch(() => localStorage.removeItem(storageKey)) // stale token -> selfie screen
+      .finally(() => setRestoring(false));
+  }, [token, storageKey]);
+
+  const onMatched = useCallback(
+    (res) => {
+      localStorage.setItem(storageKey, res.guest_token);
+      setResult(res);
+    },
+    [storageKey]
+  );
+
+  function searchAgain() {
+    localStorage.removeItem(storageKey);
+    setResult(null);
+  }
+
+  function refresh() {
+    const guestToken = localStorage.getItem(storageKey);
+    if (!guestToken) return;
+    fetch(`${API}/g/${token}/matches?guest=${encodeURIComponent(guestToken)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((res) => res && setResult(res));
+  }
+
   if (error) return <div className="center muted">{error}</div>;
-  if (!meta) return <div className="center muted">Loading…</div>;
+  if (!meta || restoring) return <div className="center muted">Loading…</div>;
 
   if (!result) {
-    return <Match token={token} eventName={meta.name} onMatched={setResult} />;
+    return <Match token={token} eventName={meta.name} onMatched={onMatched} />;
   }
 
   return (
@@ -39,9 +79,12 @@ export default function Gallery({ token }) {
 
       {result.photos.length === 0 ? (
         <div className="center muted">
-          No matches yet. More photos may still be arriving — try again in a bit.
+          No matches yet. More photos may still be arriving.
           <br />
-          <button className="btn" style={{ marginTop: 16 }} onClick={() => setResult(null)}>
+          <button className="btn" style={{ marginTop: 16 }} onClick={refresh}>
+            Check again
+          </button>
+          <button className="btn ghost" style={{ marginTop: 8 }} onClick={searchAgain}>
             Try another selfie
           </button>
         </div>
@@ -55,8 +98,11 @@ export default function Gallery({ token }) {
             ))}
           </div>
           <div className="center">
-            <button className="btn ghost" onClick={() => setResult(null)}>
-              Search again
+            <button className="btn" onClick={refresh}>
+              Check for new photos
+            </button>
+            <button className="btn ghost" style={{ marginLeft: 8 }} onClick={searchAgain}>
+              Not you? Search again
             </button>
           </div>
         </>
