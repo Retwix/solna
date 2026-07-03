@@ -8,7 +8,8 @@ import Match from "./Match.jsx";
 //   3. show the personal gallery of photos they appear in
 // The guest_token from /match is kept in localStorage, so a refresh or
 // revisit re-fetches the current matches (including newer photos) without
-// retaking the selfie.
+// retaking the selfie. While the gallery is shown, an SSE stream pushes
+// newly matched photos so they appear without any button press.
 export default function Gallery({ token }) {
   const storageKey = `solna.guest.${token}`;
   const [meta, setMeta] = useState(null);
@@ -39,6 +40,41 @@ export default function Gallery({ token }) {
       .catch(() => localStorage.removeItem(storageKey)) // stale token -> selfie screen
       .finally(() => setRestoring(false));
   }, [token, storageKey]);
+
+  // Live updates: while a matched gallery is shown, stream newly matched
+  // photos. The stream resyncs from the start on every open, and the browser
+  // auto-reconnects on drop; on reconnect we also re-fetch /matches once so
+  // nothing is missed while disconnected. Closed on unmount / search again.
+  const guestToken = result?.guest_token;
+  useEffect(() => {
+    if (!guestToken) return;
+    let active = true;
+    let opened = false;
+    const es = new EventSource(
+      `${API}/g/${token}/matches/stream?guest=${encodeURIComponent(guestToken)}`
+    );
+    es.onopen = () => {
+      if (!opened) {
+        opened = true;
+        return;
+      }
+      fetch(`${API}/g/${token}/matches?guest=${encodeURIComponent(guestToken)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((res) => active && res && setResult(res));
+    };
+    es.onmessage = (e) => {
+      const photo = JSON.parse(e.data);
+      setResult((prev) => {
+        if (!prev || prev.photos.some((p) => p.id === photo.id)) return prev;
+        const photos = [...prev.photos, photo];
+        return { ...prev, photos, match_count: photos.length };
+      });
+    };
+    return () => {
+      active = false;
+      es.close();
+    };
+  }, [token, guestToken]);
 
   const onMatched = useCallback(
     (res) => {
