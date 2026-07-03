@@ -23,9 +23,10 @@ pip install -r api/requirements.txt -r watcher/requirements.txt pytest httpx
 pytest -q
 ```
 
-**Success:** `26 passed`. These cover event creation, the gallery, privacy,
-FTP password hashing, the face-matching math, and the selfie-match flow (with a
-stub face engine). This is also what runs in CI on every push.
+**Success:** `39 passed`. These cover photographer accounts, event creation,
+go-live routing and the unassigned tray, the gallery, privacy, FTP password
+hashing, the face-matching math, and the selfie-match flow (with a stub face
+engine). This is also what runs in CI on every push.
 
 ---
 
@@ -52,7 +53,7 @@ cd web && npm install && npm run dev
 ```
 
 **Success:** both `/healthz` calls return ok, and `localhost:5173` shows the
-"create event" form.
+"create photographer account" step (then the events dashboard).
 
 ---
 
@@ -80,7 +81,8 @@ Now test actual recognition without involving a camera yet.
    ```bash
    docker compose down -v && docker compose up --build
    ```
-2. Create an event at `http://localhost:5173/` — note the FTP credentials.
+2. At `http://localhost:5173/`: create your photographer account (note the
+   one-time FTP credentials), create an event, and press **Go live**.
 3. Upload a few photos **of two different people** with a desktop FTP client,
    so there's something to sort:
    ```bash
@@ -90,7 +92,7 @@ Now test actual recognition without involving a camera yet.
 4. Watch them get processed:
    ```bash
    docker compose logs -f watcher faceservice
-   # -> [watcher] ingested raw/<event>/IMG_001.jpg (2 face(s))
+   # -> [watcher] ingested raw/<photographer>/IMG_001.jpg (2 face(s))
    ```
 5. Test the sorting on the **Mac** (localhost allows live camera): open the
    event's gallery link, click "Take selfie" as one of the people, enter an email.
@@ -113,9 +115,11 @@ Now the real thing. Find your Mac's LAN IP: `ipconfig getifaddr en0` (e.g. `192.
    ```
    Recreate the affected services: `docker compose up -d --force-recreate api ftp`,
    and run the web app with `npm run dev -- --host`.
-2. Create a fresh event (so the QR/links use the LAN IP).
+2. Create a fresh photographer account + event (so the QR/links use the LAN
+   IP), and press **Go live** on the event.
 3. In the camera's FTP settings: host = your LAN IP, port **2121**,
-   **plain FTP, passive mode, secure OFF**, username/password from the event.
+   **plain FTP, passive mode, secure OFF**, the account's stable username/password
+   (entered once — future events reuse it).
    Camera and Mac on the **same WiFi**.
 4. Shoot photos of two different people. Watch `docker compose logs -f watcher`.
 5. On a **phone**, open the gallery QR. Use the **"Upload a photo"** option (the
@@ -155,9 +159,10 @@ It prints precision/recall/F1 at each threshold and recommends one. Set it in
 | Symptom | Likely cause / fix |
 |---------|--------------------|
 | Camera connects but upload hangs | `FTP_PASV_ADDRESS` not set to your LAN IP. |
-| Camera login refused | Wrong creds, or secure/SFTP on — use plain FTP, or the event was reset (`down -v` wipes events). |
+| Camera login refused | Wrong creds, or secure/SFTP on — use plain FTP, or the account was reset (`down -v` wipes photographers). |
 | Photos broken in gallery | `S3_PUBLIC_ENDPOINT` wrong; must be reachable host/LAN IP:9100. Recreate `api` after `.env` changes. |
 | Gallery 404 | Using the slug instead of the token, or DB was reset after the event was made. |
+| Photos uploaded but not in the gallery | No event was live — check the unassigned tray on the admin page and claim them. |
 | Selfie button does nothing on phone | Expected over HTTP — use "Upload a photo". |
 | Selfie says "no face detected" | Clearer/closer selfie; check face service is on `insightface`, not `fake`. |
 | Matches look wrong | Threshold not tuned — run Layer 6. |

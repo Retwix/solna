@@ -1,14 +1,16 @@
 """Solna watcher.
 
-Observes the FTP intake directory ({FTP_ROOT}/raw/{event_id}/...). For each new
-image it:
-  1. uploads the original to storage at raw/{event_id}/<name>
-  2. generates a thumbnail and uploads it to thumbs/{event_id}/<name>
-  3. (V1) calls the face service to detect + embed faces
-  4. notifies the API (/internal/ingest) with the photo keys and any faces
+Observes the FTP intake directory ({FTP_ROOT}/raw/{photographer_id}/...). For
+each new image it:
+  1. uploads the original to storage at raw/{photographer_id}/<name>
+  2. generates a thumbnail and uploads it to thumbs/{photographer_id}/<name>
+  3. calls the face service to detect + embed faces
+  4. notifies the API (/internal/ingest) with the photographer, keys and faces
 
-Faces are embedded here, on ingest, and stored against the photo. Matching a
-specific guest happens later (at selfie time) against these stored embeddings.
+The watcher does NOT know the event: it reports who uploaded, and the API
+resolves the account's active event (or holds the photo unassigned). Faces are
+embedded here, on ingest; matching a specific guest happens later (at selfie
+time) against these stored embeddings.
 """
 import io
 import os
@@ -44,8 +46,8 @@ s3 = boto3.client(
 )
 
 
-def _event_id_from_path(path: Path) -> str | None:
-    """raw/{event_id}/<file> -> event_id"""
+def _photographer_id_from_path(path: Path) -> str | None:
+    """raw/{photographer_id}/<file> -> photographer_id"""
     try:
         rel = path.relative_to(RAW_ROOT)
     except ValueError:
@@ -66,15 +68,15 @@ def _make_thumbnail(data: bytes) -> bytes:
 
 
 def process_image(path: Path) -> None:
-    event_id = _event_id_from_path(path)
-    if not event_id:
+    photographer_id = _photographer_id_from_path(path)
+    if not photographer_id:
         return
 
     data = path.read_bytes()
     name = path.name
 
-    raw_key = f"raw/{event_id}/{name}"
-    thumb_key = f"thumbs/{event_id}/{name}"
+    raw_key = f"raw/{photographer_id}/{name}"
+    thumb_key = f"thumbs/{photographer_id}/{name}"
 
     s3.put_object(Bucket=S3_BUCKET, Key=raw_key, Body=data, ContentType="image/jpeg")
 
@@ -92,7 +94,7 @@ def process_image(path: Path) -> None:
     resp = requests.post(
         INGEST_URL,
         json={
-            "event_id": event_id,
+            "photographer_id": photographer_id,
             "s3_raw_key": raw_key,
             "s3_thumb_key": thumb_key,
             "faces": faces,

@@ -1,14 +1,16 @@
-"""Solna FTP server (V0).
+"""Solna FTP server.
 
 A small pyftpdlib server that authenticates each login against the Solna
-`events` table: the FTP username/password returned at event creation. On a
-successful login the user is chrooted into that event's intake directory
-(raw/{event_id}), so uploads land exactly where the watcher observes and one
-photographer can only ever write to their own event.
+`photographers` table: the STABLE FTP username/password returned once at
+account creation (entered into the camera once, never changed per event). On a
+successful login the user is chrooted into their account's intake directory
+(raw/{photographer_id}), so uploads land exactly where the watcher observes
+and one photographer can only ever write to their own space. Which event a
+photo belongs to is resolved later by the API (the account's active event).
 
 Cameras connect with: host = your machine's LAN IP, port 2121, and the
-credentials from the event-creation response. FTP_PASV_ADDRESS must be that
-same LAN IP so passive-mode data transfers work from a separate device.
+credentials from the photographer-creation response. FTP_PASV_ADDRESS must be
+that same LAN IP so passive-mode data transfers work from a separate device.
 """
 import os
 from pathlib import Path
@@ -29,8 +31,8 @@ PASV_MAX = int(os.getenv("FTP_PASV_MAX_PORT", "21110"))
 FULL_PERMS = "elradfmwMT"
 
 
-class EventAuthorizer:
-    """pyftpdlib authorizer backed by the events table."""
+class PhotographerAuthorizer:
+    """pyftpdlib authorizer backed by the photographers table."""
 
     def __init__(self):
         self._homes: dict[str, str] = {}
@@ -38,7 +40,7 @@ class EventAuthorizer:
     def _lookup(self, username: str):
         with psycopg.connect(DATABASE_URL) as conn, conn.cursor() as cur:
             cur.execute(
-                "SELECT id, ftp_password_hash, status FROM events WHERE ftp_username = %s",
+                "SELECT id, ftp_password_hash FROM photographers WHERE ftp_username = %s",
                 (username,),
             )
             return cur.fetchone()
@@ -47,11 +49,11 @@ class EventAuthorizer:
         row = self._lookup(username)
         if not row:
             raise AuthenticationFailed("authentication failed")
-        event_id, pw_hash, status = row
-        if status != "active" or not pw_hash or not verify_password(password, pw_hash):
+        photographer_id, pw_hash = row
+        if not pw_hash or not verify_password(password, pw_hash):
             raise AuthenticationFailed("authentication failed")
 
-        home = Path(FTP_ROOT) / "raw" / event_id
+        home = Path(FTP_ROOT) / "raw" / photographer_id
         home.mkdir(parents=True, exist_ok=True)
         self._homes[username] = str(home)
 
@@ -83,7 +85,7 @@ class EventAuthorizer:
 
 def main():
     handler = FTPHandler
-    handler.authorizer = EventAuthorizer()
+    handler.authorizer = PhotographerAuthorizer()
     handler.passive_ports = range(PASV_MIN, PASV_MAX + 1)
     if PASV_ADDRESS:
         # Address advertised to clients for passive connections (your LAN IP).

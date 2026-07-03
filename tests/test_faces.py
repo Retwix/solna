@@ -4,22 +4,14 @@ import json
 import pytest
 from sqlalchemy import select
 
-from conftest import token_from_gallery_url
-
-INGEST_KEY = "test-key"
+from conftest import ingest_photo, token_from_gallery_url
 
 
-def _ingest(client, event_id, name, embeddings):
-    """Ingest a photo with one face per embedding."""
-    return client.post(
-        "/internal/ingest",
-        json={
-            "event_id": event_id,
-            "s3_raw_key": f"raw/{event_id}/{name}",
-            "s3_thumb_key": f"thumbs/{event_id}/{name}",
-            "faces": [{"embedding": e, "det_score": 1.0} for e in embeddings],
-        },
-        headers={"X-Ingest-Key": INGEST_KEY},
+def _ingest(client, event, name, embeddings):
+    """Ingest a photo (via the live photographer) with one face per embedding."""
+    return ingest_photo(
+        client, event["photographer"]["id"], name,
+        faces=[{"embedding": e, "det_score": 1.0} for e in embeddings],
     )
 
 
@@ -29,7 +21,7 @@ def test_ingest_stores_faces_and_face_count(client, make_event):
     from models import Face
 
     event = make_event("Faces Event")
-    assert _ingest(client, event["id"], "a.jpg", [[1, 0, 0], [0, 1, 0]]).status_code == 200
+    assert _ingest(client, event, "a.jpg", [[1, 0, 0], [0, 1, 0]]).status_code == 200
 
     db = SessionLocal()
     try:
@@ -48,8 +40,8 @@ def test_selfie_match_returns_photos_the_guest_appears_in(client, make_event, mo
     token = token_from_gallery_url(event["gallery_url"])
 
     # Two photos: one with "my" face, one with someone else.
-    _ingest(client, event["id"], "me.jpg", [[1.0, 0.0, 0.0]])
-    _ingest(client, event["id"], "other.jpg", [[0.0, 1.0, 0.0]])
+    _ingest(client, event, "me.jpg", [[1.0, 0.0, 0.0]])
+    _ingest(client, event, "other.jpg", [[0.0, 1.0, 0.0]])
 
     # The face service "detects" my face in the selfie.
     monkeypatch.setattr(
@@ -76,7 +68,7 @@ def test_match_persists_the_guest(client, make_event, monkeypatch):
 
     event = make_event("Guest Event")
     token = token_from_gallery_url(event["gallery_url"])
-    _ingest(client, event["id"], "me.jpg", [[1.0, 0.0, 0.0]])
+    _ingest(client, event, "me.jpg", [[1.0, 0.0, 0.0]])
 
     monkeypatch.setattr(
         face_client, "embed_image",

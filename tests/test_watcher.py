@@ -29,15 +29,15 @@ def test_thumbnail_flattens_transparency_to_rgb():
     assert Image.open(io.BytesIO(out)).mode == "RGB"
 
 
-def test_event_id_is_parsed_from_intake_path():
-    """raw/{event_id}/<file> resolves to the event id; files outside don't."""
+def test_photographer_id_is_parsed_from_intake_path():
+    """raw/{photographer_id}/<file> resolves to the account; files outside don't."""
     import process
 
-    inside = process.RAW_ROOT / "evt-123" / "photo.jpg"
-    assert process._event_id_from_path(inside) == "evt-123"
+    inside = process.RAW_ROOT / "ph-123" / "photo.jpg"
+    assert process._photographer_id_from_path(inside) == "ph-123"
 
-    loose = process.RAW_ROOT / "stray.jpg"  # no event folder
-    assert process._event_id_from_path(loose) is None
+    loose = process.RAW_ROOT / "stray.jpg"  # no account folder
+    assert process._photographer_id_from_path(loose) is None
 
 
 def test_only_image_files_are_processed():

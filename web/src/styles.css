@@ -102,6 +102,22 @@ body {
 
 .err { color: #ff7a7a; }
 
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+.badge.live { background: #1f7a3d; color: #d9ffe6; }
+
 /* --- Guest selfie / match --- */
 .selfie {
   width: 100%;

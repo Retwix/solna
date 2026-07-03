@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import Base, engine
-from routers import events, gallery, ingest, match
+from routers import events, gallery, ingest, match, photographers, photos
 
 # V0: create tables on startup. (Switch to Alembic migrations before prod.)
 import models  # noqa: F401  (register models on Base)
@@ -25,7 +25,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(photographers.router)
 app.include_router(events.router)
+app.include_router(photos.router)
 app.include_router(gallery.router)
 app.include_router(match.router)
 app.include_router(ingest.router)

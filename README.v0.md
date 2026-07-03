@@ -1,5 +1,9 @@
 # Solna — V0 Technical README (MVP)
 
+> **Note:** the per-event FTP credentials described here are superseded by
+> stable photographer accounts + go-live routing — see
+> [`docs/design/photographer-accounts.md`](./docs/design/photographer-accounts.md).
+
 [![CI](https://github.com/Retwix/solna/actions/workflows/ci.yml/badge.svg)](https://github.com/Retwix/solna/actions/workflows/ci.yml)
 
 The smallest version that proves the core promise: a photographer shoots, photos flow in over FTP, and guests see them almost instantly by scanning a QR code.

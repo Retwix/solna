@@ -1,6 +1,14 @@
 # Design: photographer accounts + active-event routing
 
-**Status:** draft for review · **Supersedes:** per-event FTP credentials (current V0)
+**Status:** implemented (2026-07-03) · **Supersedes:** per-event FTP credentials (V0)
+
+> Decisions on the open questions below: admin auth deferred to the harden
+> pass; go-live does NOT auto-claim (manual tray claim only — explicit and
+> predictable, easy to add later); Alembic deferred (no real data yet, dev
+> resets with `down -v`); sequenced after the V1 face spike.
+> One deviation from the draft: `faces.event_id` (denormalized for match-time
+> queries) is nullable and fixed up on claim/move, so claimed photos stay
+> matchable.
 
 ## Goal
 

@@ -6,15 +6,16 @@ def test_guest_sees_photos_ingested_for_their_event(client, make_event):
     """Given an event with an ingested photo, when a guest opens the gallery,
     then they see that photo with viewable URLs."""
     event = make_event("Live Event")
+    pid = event["photographer"]["id"]
     token = token_from_gallery_url(event["gallery_url"])
 
-    assert ingest_photo(client, event["id"]).status_code == 200
+    assert ingest_photo(client, pid).status_code == 200
 
     resp = client.get(f"/g/{token}/photos")
     assert resp.status_code == 200
     photos = resp.json()["photos"]
     assert len(photos) == 1
-    assert photos[0]["url"].endswith(f"raw/{event['id']}/shot.jpg")
+    assert photos[0]["url"].endswith(f"raw/{pid}/shot.jpg")
     assert photos[0]["thumb_url"] is not None
 
 
@@ -22,7 +23,7 @@ def test_gallery_meta_reports_count_and_poll_interval(client, make_event):
     """The gallery page metadata drives the live PWA (count + poll cadence)."""
     event = make_event("Meta Event")
     token = token_from_gallery_url(event["gallery_url"])
-    ingest_photo(client, event["id"], "a.jpg")
+    ingest_photo(client, event["photographer"]["id"], "a.jpg")
 
     meta = client.get(f"/g/{token}").json()
     assert meta["name"] == "Meta Event"
@@ -58,14 +59,15 @@ def test_live_polling_returns_only_photos_newer_than_cursor(client, make_event):
     """Given a cursor from a first poll, when new photos arrive, then a poll
     with ?since= returns only the new ones (live update contract)."""
     event = make_event("Polling Event")
+    pid = event["photographer"]["id"]
     token = token_from_gallery_url(event["gallery_url"])
 
-    ingest_photo(client, event["id"], "first.jpg")
+    ingest_photo(client, pid, "first.jpg")
     first = client.get(f"/g/{token}/photos").json()
     assert len(first["photos"]) == 1
     cursor = first["cursor"]
 
-    ingest_photo(client, event["id"], "second.jpg")
+    ingest_photo(client, pid, "second.jpg")
     page = client.get(f"/g/{token}/photos", params={"since": cursor}).json()
     names = [p["url"].rsplit("/", 1)[1] for p in page["photos"]]
     assert names == ["second.jpg"]
