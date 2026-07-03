@@ -23,10 +23,10 @@ pip install -r api/requirements.txt -r watcher/requirements.txt pytest httpx
 pytest -q
 ```
 
-**Success:** `39 passed`. These cover photographer accounts, event creation,
+**Success:** `45 passed`. These cover photographer accounts, event creation,
 go-live routing and the unassigned tray, the gallery, privacy, FTP password
-hashing, the face-matching math, and the selfie-match flow (with a stub face
-engine). This is also what runs in CI on every push.
+hashing, the face-matching math, the selfie-match flow (with a stub face
+engine), and the live matched-photo stream. This is also what runs in CI on every push.
 
 ---
 

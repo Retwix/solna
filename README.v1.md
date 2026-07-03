@@ -85,7 +85,9 @@ Behaviour tests cover the math and the endpoints with a stub engine
 - **Threshold not yet tuned** on real data — do this first.
 - ~~Matched gallery is a point-in-time result~~ Done: `/match` returns a
   `guest_token`; `GET /g/{token}/matches?guest=` re-runs the stored embedding,
-  so refresh/revisit keeps the gallery and picks up newer photos.
+  so refresh/revisit keeps the gallery and picks up newer photos — and
+  `GET /g/{token}/matches/stream` (SSE) pushes new photos of the guest live,
+  so the open gallery updates seconds after the photographer shoots.
 - No pre-sorting/clustering or styling/LUT yet (in the V1 target doc).
 - Privacy: biometric data + email now in play — consent capture and retention
   belong in the "harden" pass before any real event.

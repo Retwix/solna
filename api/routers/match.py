@@ -1,13 +1,15 @@
+import asyncio
 import json
 import secrets
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import face_client
 from config import get_settings
-from database import get_db
+from database import SessionLocal, get_db
 from matching import FaceRecord, match_faces, to_vector
 from models import Event, Face, Guest, Photo
 from schemas import MatchResult, PhotoOut
@@ -92,6 +94,67 @@ async def match(
     db.commit()
 
     return _result(db, matched_ids, faces_detected=len(detected), guest_token=guest_token)
+
+
+def _photo_event(p: Photo) -> str:
+    out = PhotoOut(
+        id=p.id,
+        url=public_url(p.s3_raw_key),
+        thumb_url=public_url(p.s3_thumb_key),
+        created_at=p.created_at,
+    )
+    return f"data: {json.dumps(out.model_dump(mode='json'))}\n\n"
+
+
+async def matched_photo_events(token: str, guest_token: str):
+    """SSE generator for the live matched gallery: poll for photos newer than
+    the cursor, match the guest's stored embedding against those photos' faces
+    only, and emit each hit. Faces are inserted in the same transaction as
+    their photo at ingest, so a photo-level created_at cursor is sound.
+    Ends when the event stops being active (or the guest disappears)."""
+    last_created = None
+    while True:
+        db = SessionLocal()
+        try:
+            event = db.scalar(select(Event).where(Event.gallery_token == token))
+            if event is None or event.status != "active":
+                break
+            g = db.scalar(select(Guest).where(Guest.token == guest_token, Guest.event_id == event.id))
+            if g is None:
+                break
+            query = to_vector(g.selfie_embedding)
+
+            stmt = select(Photo).where(Photo.event_id == event.id, Photo.status == "ready")
+            if last_created is not None:
+                stmt = stmt.where(Photo.created_at > last_created)
+            photos = list(db.scalars(stmt.order_by(Photo.created_at.asc())))
+            if photos:
+                last_created = photos[-1].created_at
+                rows = db.scalars(select(Face).where(Face.photo_id.in_([p.id for p in photos]))).all()
+                records = [FaceRecord(photo_id=f.photo_id, embedding=to_vector(f.embedding)) for f in rows]
+                matched = {m.photo_id for m in match_faces(query, records, settings.match_similarity_threshold)}
+                for p in photos:
+                    if p.id in matched:
+                        yield _photo_event(p)
+        finally:
+            db.close()
+        await asyncio.sleep(settings.gallery_poll_interval_ms / 1000)
+
+
+@router.get("/{token}/matches/stream")
+def matches_stream(
+    token: str,
+    guest: str = Query(..., description="guest_token returned by /match"),
+    db: Session = Depends(get_db),
+):
+    """Live matched gallery: validate up front with the same 404 semantics as
+    /matches, then push each newly matched photo as an SSE event."""
+    event = _get_active_event(db, token)
+    g = db.scalar(select(Guest).where(Guest.token == guest, Guest.event_id == event.id))
+    if g is None:
+        raise HTTPException(status_code=404, detail="guest not found")
+
+    return StreamingResponse(matched_photo_events(token, guest), media_type="text/event-stream")
 
 
 @router.get("/{token}/matches", response_model=MatchResult)
