@@ -26,6 +26,18 @@ def test_match_returns_only_photos_over_threshold_best_first():
     assert "p3" not in ids           # below threshold
 
 
+def test_a_malformed_stored_embedding_is_skipped_not_fatal():
+    """A face row whose embedding dimension doesn't match the query (corrupt
+    or legacy data) must be skipped — one bad row must never 500 the whole
+    guest match."""
+    faces = [
+        FaceRecord(photo_id="bad", embedding=to_vector([1.0, 0.0])),  # wrong dim
+        FaceRecord(photo_id="good", embedding=to_vector([1.0, 0.0, 0.0])),
+    ]
+    matches = match_faces([1.0, 0.0, 0.0], faces, threshold=0.35)
+    assert [m.photo_id for m in matches] == ["good"]
+
+
 def test_each_photo_scored_by_its_best_face():
     me = [1.0, 0.0, 0.0]
     faces = [

@@ -56,6 +56,10 @@ def match_faces(
     q = normalize(to_vector(query_embedding))
     best: dict[str, float] = {}
     for f in faces:
+        if f.embedding.shape != q.shape:
+            # Corrupt/legacy row (e.g. an embedding of the wrong dimension).
+            # Skip it — one bad row must never break the whole guest match.
+            continue
         sim = float(np.dot(q, normalize(f.embedding)))
         if sim > best.get(f.photo_id, -1.0):
             best[f.photo_id] = sim
