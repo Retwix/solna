@@ -153,9 +153,19 @@ hand-rolled dark CSS file. Brief already written in
 - Milestone 4 items are tempting but none of them block a workable app — resist
   starting 4.x before M1–M2 are done.
 
+## Status (2026-07-24)
+
+- Backlog + design docs merged to `main` (PR #4).
+- `deploy-pass.md` verified line-by-line against the code and corrected
+  (port 80 for ACME, `PUBLIC_BASE_URL` drives QR links, `FTP_PASV_ADDRESS`
+  must be the VPS public IP, Caddy — not `--root-path` — strips `/api`).
+  It is implementation-ready.
+- Nothing from Milestone 1 is started yet.
+
 ## Next step
 
-Pick story **1.1 + 1.2** as the first slice (public HTTPS with a migration-managed
-DB is the walking skeleton of production). Then load `planning` to turn it into
-PR-sized slices; each slice runs the full TDD cycle (`tdd`, `testing`,
-`mutation-testing`, `refactoring`) before code changes.
+Load `planning` and turn stories **1.1 + 1.2** (public HTTPS + Alembic — the
+walking skeleton of production) into PR-sized slices; each slice runs the full
+TDD cycle (`tdd`, `testing`, `mutation-testing`, `refactoring`) before code
+changes. Before starting 1.3/1.4, get parking-lot decisions: signup policy
+(recommend invite-only), guest-email timing, session length, VPS provider.
