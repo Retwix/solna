@@ -23,13 +23,13 @@ real domain later; nothing below depends on the name.
                     Internet
                        │
        ┌───────────────┼──────────────────┐
-       │ :443 (HTTPS)  │ :2121 + passive  │
+       │ :80 + :443    │ :2121 + passive  │
        ▼               ▼                  │
   ┌─────────┐     ┌─────────┐             │
-  │  Caddy  │     │   ftp   │  (unchanged)│
+  │  Caddy  │     │   ftp   │             │
   └────┬────┘     └─────────┘             │
        │ serves/                     VPS firewall:
-       │ proxies                     443, 2121, 21100-21110 only
+       │ proxies                     80, 443, 2121, 21100-21110 only
        ├── /            → web/dist (static build)
        ├── /api/*       → api:8000
        └── /media/*     → minio:9000/solna-media
@@ -41,9 +41,23 @@ dev-only `allow_origins=["*"]` goes away), makes cookies trivially safe, and
 means the QR/gallery links are just `https://<domain>/g/<token>`.
 
 Changes this implies:
+- Port 80 stays open: Caddy needs it for the ACME HTTP-01 challenge and for
+  redirecting `http://` hits (typed URLs, old links) to HTTPS.
 - `web`: `VITE_API_BASE=/api` at build time; Caddy serves `dist/` (no Node in prod).
-- `api`: served under `/api` (uvicorn `--root-path /api` or Caddy strip-prefix).
-- `S3_PUBLIC_ENDPOINT=https://<domain>/media`; Caddy proxies to MinIO.
+- `api`: Caddy strips the `/api` prefix (`handle_path`); uvicorn additionally
+  gets `--root-path /api` so generated docs/URLs are correct. (`--root-path`
+  alone does NOT strip the prefix — the strip must happen in Caddy.)
+- `PUBLIC_BASE_URL=https://<domain>` — QR/gallery links are built server-side
+  from it (`api/routers/events.py`); left at the default they point at
+  `localhost:8000` even with everything else deployed.
+- `S3_PUBLIC_ENDPOINT=https://<domain>/media`; Caddy proxies to MinIO. Public
+  object URLs are `<endpoint>/solna-media/<key>` (`api/storage.py`), so the
+  `/media/*` route strips `/media` and forwards the rest (bucket included) to
+  `minio:9000`.
+- `ftp`: config-only change — `FTP_PASV_ADDRESS` must be set to the VPS public
+  IP, otherwise passive mode advertises an unreachable address to cameras.
+- SSE endpoints (`/g/*/stream`, `/g/*/matches/stream`) work through Caddy's
+  `reverse_proxy` unmodified — it auto-detects `text/event-stream` and flushes.
 - New `docker-compose.prod.yml` overlay: adds caddy, removes host-port
   mappings except ftp, sets restart policies.
 
