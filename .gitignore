@@ -21,6 +21,9 @@ data/
 ftpdata/
 *.sqlite3
 
+# Claude session state (transient handoffs, not repo content)
+.claude/handoffs/
+
 # OS / editors
 .DS_Store
 .idea/
