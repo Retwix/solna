@@ -12,8 +12,8 @@ from config import get_settings
 from database import SessionLocal, get_db
 from matching import FaceRecord, match_faces, to_vector
 from models import Event, Face, Guest, Photo
-from schemas import MatchResult, PhotoOut
-from storage import public_url
+from schemas import MatchResult
+from storage import photo_out
 
 router = APIRouter(prefix="/g", tags=["match"])
 settings = get_settings()
@@ -43,12 +43,7 @@ def _result(db: Session, matched_ids: list[str], faces_detected: int, guest_toke
     ordered = [photos[pid] for pid in matched_ids if pid in photos]
     return MatchResult(
         photos=[
-            PhotoOut(
-                id=p.id,
-                url=public_url(p.s3_raw_key),
-                thumb_url=public_url(p.s3_thumb_key),
-                created_at=p.created_at,
-            )
+            photo_out(p)
             for p in ordered
         ],
         match_count=len(ordered),
@@ -58,7 +53,7 @@ def _result(db: Session, matched_ids: list[str], faces_detected: int, guest_toke
 
 
 @router.post("/{token}/match", response_model=MatchResult)
-async def match(
+def match(
     token: str,
     file: UploadFile,
     email: str = Form(...),
@@ -70,7 +65,7 @@ async def match(
     """
     event = _get_active_event(db, token)
 
-    selfie = await file.read()
+    selfie = file.file.read()
     if not selfie:
         raise HTTPException(status_code=400, detail="empty selfie")
 
@@ -97,12 +92,7 @@ async def match(
 
 
 def _photo_event(p: Photo) -> str:
-    out = PhotoOut(
-        id=p.id,
-        url=public_url(p.s3_raw_key),
-        thumb_url=public_url(p.s3_thumb_key),
-        created_at=p.created_at,
-    )
+    out = photo_out(p)
     return f"data: {json.dumps(out.model_dump(mode='json'))}\n\n"
 
 

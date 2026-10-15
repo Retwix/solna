@@ -146,3 +146,19 @@ body {
   text-decoration: underline;
   font-size: 0.9rem;
 }
+
+/* --- Guest: "Your photos" / "All photos" switch (album open only) --- */
+.tabs { display: flex; gap: 4px; padding: 8px 16px; }
+.tab {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #26262e;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+}
+.tab.active { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+
+/* --- Admin: per-event album toggle --- */
+.toggle { display: flex; gap: 10px; align-items: flex-start; font-size: 0.9rem; color: var(--muted); }

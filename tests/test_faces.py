@@ -4,7 +4,7 @@ import json
 import pytest
 from sqlalchemy import select
 
-from conftest import ingest_photo, token_from_gallery_url
+from conftest import ingest_photo, photo_name, token_from_gallery_url
 
 
 def _ingest(client, event, name, embeddings):
@@ -57,7 +57,7 @@ def test_selfie_match_returns_photos_the_guest_appears_in(client, make_event, mo
     assert r.status_code == 200
     body = r.json()
     assert body["match_count"] == 1
-    assert body["photos"][0]["url"].endswith("me.jpg")
+    assert photo_name(body["photos"][0]["url"]) == "me.jpg"
 
 
 def test_match_persists_the_guest(client, make_event, monkeypatch):
@@ -120,7 +120,7 @@ def test_returning_guest_refetches_matches_without_a_new_selfie(client, make_eve
     assert r.status_code == 200
     body = r.json()
     assert body["match_count"] == 2
-    names = sorted(p["url"].rsplit("/", 1)[1] for p in body["photos"])
+    names = sorted(photo_name(p["url"]) for p in body["photos"])
     assert names == ["me-1.jpg", "me-2.jpg"]
 
 
@@ -162,3 +162,43 @@ def test_match_rejects_selfie_with_no_face(client, make_event, monkeypatch):
         files={"file": ("selfie.jpg", b"x", "image/jpeg")},
     )
     assert r.status_code == 422
+
+
+def test_a_slow_face_service_does_not_stall_other_requests(client, make_event, monkeypatch):
+    """While one guest's selfie waits on the face service, the API keeps
+    answering everyone else (live galleries, other guests)."""
+    import threading
+
+    import face_client
+
+    event = make_event("Busy Event")
+    token = token_from_gallery_url(event["gallery_url"])
+    selfie_in_flight = threading.Event()
+    release_face_service = threading.Event()
+
+    def slow_embed(data, filename="selfie.jpg"):
+        selfie_in_flight.set()
+        release_face_service.wait(timeout=5)
+        return [{"embedding": [1.0, 0.0, 0.0], "det_score": 0.99}]
+
+    monkeypatch.setattr(face_client, "embed_image", slow_embed)
+
+    selfie = threading.Thread(target=lambda: client.post(
+        f"/g/{token}/match",
+        data={"email": "guest@example.com"},
+        files={"file": ("selfie.jpg", b"fake-bytes", "image/jpeg")},
+    ))
+    selfie.start()
+    assert selfie_in_flight.wait(timeout=5)
+
+    other = {}
+    meta = threading.Thread(target=lambda: other.update(r=client.get(f"/g/{token}")))
+    meta.start()
+    meta.join(timeout=2)
+    answered_while_selfie_pending = not meta.is_alive()
+
+    release_face_service.set()
+    selfie.join(timeout=5)
+    meta.join(timeout=5)
+    assert answered_while_selfie_pending
+    assert other["r"].status_code == 200

@@ -32,7 +32,8 @@ services:
       timeout: 3s
       retries: 10
 
-  # Creates the bucket on startup and makes it publicly readable (V0: public gallery).
+  # Creates the (private) bucket on startup. Browsers get photos through
+  # expiring signed links minted by the API.
   minio-init:
     image: minio/mc:latest
     depends_on:
@@ -42,7 +43,7 @@ services:
       /bin/sh -c "
       mc alias set local http://minio:9000 minioadmin minioadmin &&
       mc mb -p local/solna-media || true &&
-      mc anonymous set download local/solna-media &&
+      mc anonymous set none local/solna-media &&
       echo 'bucket ready'
       "
 
@@ -56,19 +57,8 @@ services:
         condition: service_healthy
     ports:
       - "8080:8000"   # API on host 8080
-    volumes:
-      - ftpdata:/data/ftp
 
-  watcher:
-    build: ./watcher
-    env_file: .env
-    depends_on:
-      - api
-      - faceservice
-    volumes:
-      - ftpdata:/data/ftp
-
-  # Facial recognition (V1): detect + embed faces. Both the watcher (on ingest)
+  # Facial recognition (V1): detect + embed faces. Both the FTP server (on ingest)
   # and the API (on guest selfie) call it. Set FACE_ENGINE=fake in .env to run
   # the whole pipeline without downloading the InsightFace model.
   faceservice:
@@ -79,15 +69,20 @@ services:
     volumes:
       - facemodels:/root/.insightface   # cache the downloaded model across restarts
 
-  # Solna FTP server: authenticates each login against the events table and
-  # chroots the user into raw/{event_id}. Writes into the shared ftpdata volume
-  # the watcher observes. Set FTP_PASV_ADDRESS in .env to your LAN IP for cameras.
+  # Solna FTP server: authenticates each login against the photographers table,
+  # chroots the user into raw/{photographer_id}, and ingests every fully
+  # received photo (S3 + thumbnail + faces -> API). Set FTP_PASV_ADDRESS in
+  # .env to your LAN IP for cameras.
   ftp:
     build: ./ftpserver
     env_file: .env
     depends_on:
       postgres:
         condition: service_healthy
+      api:
+        condition: service_started
+      faceservice:
+        condition: service_started
     ports:
       - "2121:21"   # FTP control on host 2121
       - "21100-21110:21100-21110"   # passive data range

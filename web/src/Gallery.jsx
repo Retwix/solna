@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { API } from "./api.js";
+import AllPhotos from "./AllPhotos.jsx";
 import Match from "./Match.jsx";
 
 // Guest gallery for one event (/g/{token}). Flow:
@@ -16,6 +17,7 @@ export default function Gallery({ token }) {
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null); // match result: { photos, match_count, guest_token }
   const [restoring, setRestoring] = useState(() => !!localStorage.getItem(storageKey));
+  const [view, setView] = useState("mine"); // "mine" | "all" (only if the album is open)
 
   useEffect(() => {
     fetch(`${API}/g/${token}`)
@@ -100,8 +102,36 @@ export default function Gallery({ token }) {
   if (error) return <div className="center muted">{error}</div>;
   if (!meta || restoring) return <div className="center muted">Loading…</div>;
 
+  const tabs = meta.full_album ? (
+    <nav className="tabs">
+      <button className={view === "mine" ? "tab active" : "tab"} onClick={() => setView("mine")}>
+        Your photos
+      </button>
+      <button className={view === "all" ? "tab active" : "tab"} onClick={() => setView("all")}>
+        All photos
+      </button>
+    </nav>
+  ) : null;
+
+  if (meta.full_album && view === "all") {
+    return (
+      <div className="app">
+        <header className="header">
+          <h1>{meta.name}</h1>
+        </header>
+        {tabs}
+        <AllPhotos token={token} />
+      </div>
+    );
+  }
+
   if (!result) {
-    return <Match token={token} eventName={meta.name} onMatched={onMatched} />;
+    return (
+      <>
+        {tabs}
+        <Match token={token} eventName={meta.name} onMatched={onMatched} />
+      </>
+    );
   }
 
   return (
@@ -112,6 +142,7 @@ export default function Gallery({ token }) {
           {result.match_count} photo{result.match_count === 1 ? "" : "s"} of you
         </span>
       </header>
+      {tabs}
 
       {result.photos.length === 0 ? (
         <div className="center muted">

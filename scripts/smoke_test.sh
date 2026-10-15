@@ -4,8 +4,8 @@
 #
 # Exercises the full pipe WITHOUT a camera:
 #   create photographer -> create event -> go live
-#   -> drop a photo into the photographer's FTP intake dir
-#   -> watcher thumbnails + ingests -> photo shows up in the gallery API.
+#   -> upload a photo over FTP with the account's credentials
+#   -> FTP server thumbnails + ingests -> photo shows up in the gallery API.
 #
 # Prereqs: `docker compose up --build` is running.
 # Usage:   ./scripts/smoke_test.sh
@@ -13,13 +13,15 @@
 set -euo pipefail
 
 API="${API:-http://localhost:8080}"
-INGEST_KEY="${INGEST_API_KEY:-dev-ingest-key}"
+FTP="${FTP:-localhost:2121}"
 
 echo "1) Creating a photographer account..."
 PHOTOGRAPHER_JSON="$(curl -fsS -X POST "$API/photographers" \
   -H 'content-type: application/json' \
   -d '{"name":"Smoke Test Photographer"}')"
-PHOTOGRAPHER_ID="$(python3 -c 'import json,sys;print(json.loads(sys.argv[1])["id"])' "$PHOTOGRAPHER_JSON")"
+read -r PHOTOGRAPHER_ID FTP_USER FTP_PASS <<EOF
+$(python3 -c 'import json,sys;d=json.loads(sys.argv[1]);print(d["id"],d["ftp"]["username"],d["ftp"]["password"])' "$PHOTOGRAPHER_JSON")
+EOF
 echo "   photographer_id = $PHOTOGRAPHER_ID"
 
 echo "2) Creating an event and going live..."
@@ -40,22 +42,22 @@ curl -fsS -X POST "$API/events/$EVENT_ID/go-live" > /dev/null
 echo "   event_id   = $EVENT_ID (live)"
 echo "   gallery    = $GALLERY_URL"
 
-echo "3) Dropping a test photo into the photographer's FTP intake dir..."
-# Generate a JPEG straight into the shared volume the watcher observes.
-docker compose exec -T watcher python - "$PHOTOGRAPHER_ID" <<'PY'
-import os, sys
+echo "3) Uploading a test photo over FTP (as the camera would)..."
+PHOTO="$(mktemp -t solna-smoke).jpg"
+docker compose exec -T api python -c '
+import io, sys
 from PIL import Image
-photographer_id = sys.argv[1]
-d = f"/data/ftp/raw/{photographer_id}"
-os.makedirs(d, exist_ok=True)
-Image.new("RGB", (1600, 1200), (90, 140, 200)).save(f"{d}/smoke-1.jpg", "JPEG")
-print("dropped", f"{d}/smoke-1.jpg")
-PY
+buf = io.BytesIO()
+Image.new("RGB", (1600, 1200), (90, 140, 200)).save(buf, "JPEG")
+sys.stdout.buffer.write(buf.getvalue())' > "$PHOTO"
+curl -fsS -T "$PHOTO" "ftp://$FTP_USER:$FTP_PASS@$FTP/smoke-1.jpg"
+rm -f "$PHOTO"
+echo "   uploaded smoke-1.jpg"
 
 echo "4) Waiting for the photo to appear in the gallery..."
 for i in $(seq 1 20); do
-  COUNT="$(curl -fsS "$API/g/$TOKEN/photos" \
-    | python3 -c 'import json,sys;print(len(json.load(sys.stdin)["photos"]))')"
+  COUNT="$(curl -fsS "$API/g/$TOKEN" \
+    | python3 -c 'import json,sys;print(json.load(sys.stdin)["photo_count"])')"
   if [ "$COUNT" -ge 1 ]; then
     echo "   ✅ gallery now shows $COUNT photo(s) after ~$((i))s"
     echo
@@ -66,5 +68,5 @@ for i in $(seq 1 20); do
   sleep 1
 done
 
-echo "   ❌ photo did not appear within 20s — check: docker compose logs watcher api"
+echo "   ❌ photo did not appear within 20s — check: docker compose logs ftp api"
 exit 1

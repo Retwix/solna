@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import Event, Face, Photo
 from schemas import PhotoMove, PhotoOut
-from storage import public_url
+from storage import photo_out
 
 router = APIRouter(prefix="/photos", tags=["photos"])
 
@@ -35,9 +35,4 @@ def move_photo(photo_id: str, payload: PhotoMove, db: Session = Depends(get_db))
     db.commit()
     db.refresh(photo)
 
-    return PhotoOut(
-        id=photo.id,
-        url=public_url(photo.s3_raw_key),
-        thumb_url=public_url(photo.s3_thumb_key),
-        created_at=photo.created_at,
-    )
+    return photo_out(photo)

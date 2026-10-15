@@ -24,15 +24,17 @@ function saveState(state) {
   localStorage.setItem(LS_KEY, JSON.stringify(state));
 }
 
-async function post(path, body) {
+async function send(method, path, body) {
   const r = await fetch(`${API}${path}`, {
-    method: "POST",
+    method,
     headers: { "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!r.ok) throw new Error(`${path} failed (${r.status})`);
   return r.json();
 }
+
+const post = (path, body) => send("POST", path, body);
 
 // --- Step 1: once-only account creation ---------------------------------------
 
@@ -113,7 +115,7 @@ function CreateAccount({ onCreated }) {
 
 // --- Step 2: events, go-live, unassigned tray ----------------------------------
 
-function EventCard({ event, isLive, onGoLive, onStop, onClaim, trayCount }) {
+function EventCard({ event, isLive, onGoLive, onStop, onClaim, onToggleAlbum, trayCount }) {
   const [showQr, setShowQr] = useState(false);
   return (
     <div className="card">
@@ -130,6 +132,14 @@ function EventCard({ event, isLive, onGoLive, onStop, onClaim, trayCount }) {
       <a className="link" href={event.gallery_url} target="_blank" rel="noreferrer">
         {event.gallery_url}
       </a>
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={!!event.full_album}
+          onChange={(e) => onToggleAlbum(event, e.target.checked)}
+        />
+        Guests can browse all photos (otherwise: only the ones they're in)
+      </label>
       <button className="btn ghost" onClick={() => setShowQr((s) => !s)}>
         {showQr ? "Hide QR" : "Show QR"}
       </button>
@@ -149,7 +159,7 @@ function EventCard({ event, isLive, onGoLive, onStop, onClaim, trayCount }) {
   );
 }
 
-function Dashboard({ photographer, events, onAddEvent, onAccountGone }) {
+function Dashboard({ photographer, events, onAddEvent, onUpdateEvent, onAccountGone }) {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -206,6 +216,11 @@ function Dashboard({ photographer, events, onAddEvent, onAccountGone }) {
     setActiveEventId(s.active_event_id);
   }
 
+  async function toggleAlbum(event, fullAlbum) {
+    const s = await send("PATCH", `/events/${event.id}`, { full_album: fullAlbum });
+    onUpdateEvent({ ...event, full_album: s.full_album });
+  }
+
   async function claim(event) {
     await post(`/events/${event.id}/claim-unassigned`);
     refreshTray();
@@ -245,6 +260,7 @@ function Dashboard({ photographer, events, onAddEvent, onAccountGone }) {
           onGoLive={goLive}
           onStop={stop}
           onClaim={claim}
+          onToggleAlbum={toggleAlbum}
           trayCount={tray.length}
         />
       ))}
@@ -293,6 +309,9 @@ export default function Admin() {
       photographer={state.photographer}
       events={state.events || []}
       onAddEvent={(event) => update({ ...state, events: [...(state.events || []), event] })}
+      onUpdateEvent={(event) =>
+        update({ ...state, events: state.events.map((e) => (e.id === event.id ? event : e)) })
+      }
       onAccountGone={onAccountGone}
     />
   );

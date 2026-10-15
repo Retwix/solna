@@ -37,6 +37,15 @@ class EventCreated(BaseModel):
     qr_png_base64: str
 
 
+class EventUpdate(BaseModel):
+    full_album: bool
+
+
+class EventSettings(BaseModel):
+    id: str
+    full_album: bool
+
+
 class LiveStatus(BaseModel):
     photographer_id: str
     active_event_id: str | None
@@ -50,6 +59,7 @@ class EventPublic(BaseModel):
     name: str
     photo_count: int
     poll_interval_ms: int
+    full_album: bool
 
 
 class PhotoOut(BaseModel):
@@ -71,7 +81,7 @@ class FaceIn(BaseModel):
 
 
 class IngestIn(BaseModel):
-    # The watcher only knows who uploaded (from the path); the API resolves
+    # The FTP ingest pipeline only knows who uploaded (from the path); the API resolves
     # which event is live for that account.
     photographer_id: str
     s3_raw_key: str

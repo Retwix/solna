@@ -9,7 +9,7 @@ from config import get_settings
 from database import get_db
 from models import Event, Face, Photo, Photographer
 from qr import qr_png_base64
-from schemas import ClaimResult, EventCreate, EventCreated, LiveStatus
+from schemas import ClaimResult, EventCreate, EventCreated, EventSettings, EventUpdate, LiveStatus
 
 router = APIRouter(prefix="/events", tags=["events"])
 settings = get_settings()
@@ -58,6 +58,15 @@ def create_event(payload: EventCreate, db: Session = Depends(get_db)):
         gallery_url=gallery_url,
         qr_png_base64=qr_png_base64(gallery_url),
     )
+
+
+@router.patch("/{event_id}", response_model=EventSettings)
+def update_event(event_id: str, payload: EventUpdate, db: Session = Depends(get_db)):
+    """Per-event settings: whether guests may browse the full album."""
+    event = _get_event(db, event_id)
+    event.full_album = payload.full_album
+    db.commit()
+    return EventSettings(id=event.id, full_album=event.full_album)
 
 
 @router.post("/{event_id}/go-live", response_model=LiveStatus)

@@ -6,11 +6,10 @@ from sqlalchemy.orm import Session
 
 from config import get_settings
 from database import get_db
-from ftp_provision import ensure_photographer_intake_dir
 from models import Photo, Photographer
-from schemas import FtpCredentials, PhotoOut, PhotographerCreate, PhotographerCreated, PhotoPage
+from schemas import FtpCredentials, PhotographerCreate, PhotographerCreated, PhotoPage
 from security import hash_password
-from storage import public_url
+from storage import photo_out
 
 router = APIRouter(prefix="/photographers", tags=["photographers"])
 settings = get_settings()
@@ -33,9 +32,6 @@ def create_photographer(payload: PhotographerCreate, db: Session = Depends(get_d
     db.add(photographer)
     db.commit()
     db.refresh(photographer)
-
-    # Stable landing dir: raw/{photographer_id}/ — where the watcher looks.
-    ensure_photographer_intake_dir(photographer.id)
 
     return PhotographerCreated(
         id=photographer.id,
@@ -64,8 +60,7 @@ def unassigned_photos(photographer_id: str, db: Session = Depends(get_db)):
     ))
     return PhotoPage(
         photos=[
-            PhotoOut(id=p.id, url=public_url(p.s3_raw_key),
-                     thumb_url=public_url(p.s3_thumb_key), created_at=p.created_at)
+            photo_out(p)
             for p in photos
         ],
         cursor=photos[-1].id if photos else None,
