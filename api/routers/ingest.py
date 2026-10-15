@@ -14,9 +14,9 @@ router = APIRouter(prefix="/internal", tags=["internal"])
 
 @router.post("/ingest", response_model=PhotoOut, dependencies=[Depends(require_ingest_key)])
 def ingest(payload: IngestIn, db: Session = Depends(get_db)):
-    """Register a photo the watcher has uploaded, plus any faces it detected.
+    """Register a photo the FTP ingest pipeline has uploaded, plus any faces it detected.
 
-    The watcher only knows WHO uploaded (the photographer id from the path);
+    The pipeline only knows WHO uploaded (the photographer id from the path);
     this endpoint resolves WHERE it goes: the account's active event, or the
     unassigned tray if no event is live. The rule lives here, in one DB read.
     """

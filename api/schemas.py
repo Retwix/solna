@@ -71,7 +71,7 @@ class FaceIn(BaseModel):
 
 
 class IngestIn(BaseModel):
-    # The watcher only knows who uploaded (from the path); the API resolves
+    # The FTP ingest pipeline only knows who uploaded (from the path); the API resolves
     # which event is live for that account.
     photographer_id: str
     s3_raw_key: str

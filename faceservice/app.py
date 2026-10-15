@@ -5,7 +5,7 @@ service. Exposes a single endpoint:
 
     POST /embed   (multipart image)  ->  { "faces": [ {bbox, det_score, embedding[512]}, ... ] }
 
-Both the watcher (on photo ingest) and the API (on guest selfie) call it, so
+Both the FTP server (on photo ingest) and the API (on guest selfie) call it, so
 the InsightFace model is downloaded and loaded in exactly one place.
 
 FACE_ENGINE selects the implementation:

@@ -67,7 +67,7 @@ in `.env` first (so no model download), then `docker compose up -d --force-recre
 ```
 
 **Success:** it prints `gallery now shows 1 photo(s)` and a gallery URL. This
-means: event created → photo dropped into the intake dir → watcher thumbnailed
+means: event created → photo uploaded over FTP → the FTP server thumbnailed
 and ingested it → it appears via the API. If this passes, the plumbing is sound.
 
 ---
@@ -91,8 +91,8 @@ Now test actual recognition without involving a camera yet.
    ```
 4. Watch them get processed:
    ```bash
-   docker compose logs -f watcher faceservice
-   # -> [watcher] ingested raw/<photographer>/IMG_001.jpg (2 face(s))
+   docker compose logs -f ftp faceservice
+   # -> [ingest] ingested raw/<photographer>/IMG_001.jpg (2 face(s))
    ```
 5. Test the sorting on the **Mac** (localhost allows live camera): open the
    event's gallery link, click "Take selfie" as one of the people, enter an email.
@@ -121,7 +121,7 @@ Now the real thing. Find your Mac's LAN IP: `ipconfig getifaddr en0` (e.g. `192.
    **plain FTP, passive mode, secure OFF**, the account's stable username/password
    (entered once — future events reuse it).
    Camera and Mac on the **same WiFi**.
-4. Shoot photos of two different people. Watch `docker compose logs -f watcher`.
+4. Shoot photos of two different people. Watch `docker compose logs -f ftp`.
 5. On a **phone**, open the gallery QR. Use the **"Upload a photo"** option (the
    live selfie button needs HTTPS, which we don't have locally) — it opens the
    phone camera. Enter an email.

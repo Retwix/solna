@@ -1,32 +1,29 @@
-"""Solna watcher.
+"""Solna ingest pipeline.
 
-Observes the FTP intake directory ({FTP_ROOT}/raw/{photographer_id}/...). For
-each new image it:
+Runs inside the FTP server: for each image fully received into the intake
+directory ({FTP_ROOT}/raw/{photographer_id}/...) it:
   1. uploads the original to storage at raw/{photographer_id}/<name>
   2. generates a thumbnail and uploads it to thumbs/{photographer_id}/<name>
   3. calls the face service to detect + embed faces
   4. notifies the API (/internal/ingest) with the photographer, keys and faces
 
-The watcher does NOT know the event: it reports who uploaded, and the API
+The pipeline does NOT know the event: it reports who uploaded, and the API
 resolves the account's active event (or holds the photo unassigned). Faces are
 embedded here, on ingest; matching a specific guest happens later (at selfie
 time) against these stored embeddings.
 """
 import io
 import os
-import time
 from pathlib import Path
 
 import boto3
 import requests
 from botocore.client import Config as BotoConfig
 from PIL import Image, ImageOps
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
 
 FTP_ROOT = os.getenv("FTP_ROOT", "/data/ftp")
 RAW_ROOT = Path(FTP_ROOT) / "raw"
-# Internal API address the watcher posts ingests to (NOT the public gallery URL).
+# Internal API address the pipeline posts ingests to (NOT the public gallery URL).
 API_BASE = os.getenv("API_INTERNAL_URL", "http://api:8000")
 INGEST_URL = f"{API_BASE.rstrip('/')}/internal/ingest"
 INGEST_KEY = os.getenv("INGEST_API_KEY", "dev-ingest-key")
@@ -84,7 +81,7 @@ def process_image(path: Path) -> None:
         thumb = _make_thumbnail(data)
         s3.put_object(Bucket=S3_BUCKET, Key=thumb_key, Body=thumb, ContentType="image/jpeg")
     except Exception as e:  # noqa: BLE001 - a bad thumbnail shouldn't drop the photo
-        print(f"[watcher] thumbnail failed for {name}: {e}")
+        print(f"[ingest] thumbnail failed for {name}: {e}")
         thumb_key = None
 
     # V1: detect + embed faces via the face service. A failure here must not
@@ -103,7 +100,7 @@ def process_image(path: Path) -> None:
         timeout=30,
     )
     resp.raise_for_status()
-    print(f"[watcher] ingested {raw_key} ({len(faces)} face(s))")
+    print(f"[ingest] ingested {raw_key} ({len(faces)} face(s))")
 
 
 def _embed_faces(data: bytes, name: str) -> list:
@@ -116,7 +113,7 @@ def _embed_faces(data: bytes, name: str) -> list:
         resp.raise_for_status()
         return resp.json().get("faces", [])
     except Exception as e:  # noqa: BLE001
-        print(f"[watcher] face embedding failed for {name}: {e}")
+        print(f"[ingest] face embedding failed for {name}: {e}")
         return []
 
 
@@ -124,54 +121,11 @@ def _is_image(path: Path) -> bool:
     return path.suffix.lower() in VALID_EXT
 
 
-def _wait_until_stable(path: Path, tries: int = 10, interval: float = 0.5) -> bool:
-    """Wait for the FTP upload to finish (size stops changing)."""
-    last = -1
-    for _ in range(tries):
-        if not path.exists():
-            return False
-        size = path.stat().st_size
-        if size == last and size > 0:
-            return True
-        last = size
-        time.sleep(interval)
-    return path.exists()
-
-
-class Handler(FileSystemEventHandler):
-    def _handle(self, src_path: str) -> None:
-        path = Path(src_path)
-        if not _is_image(path):
-            return
-        if not _wait_until_stable(path):
-            return
-        try:
-            process_image(path)
-        except Exception as e:  # noqa: BLE001
-            print(f"[watcher] error processing {path}: {e}")
-
-    def on_created(self, event):
-        if not event.is_directory:
-            self._handle(event.src_path)
-
-    def on_moved(self, event):  # some FTP servers upload to a temp name then rename
-        if not event.is_directory:
-            self._handle(event.dest_path)
-
-
-def main() -> None:
-    RAW_ROOT.mkdir(parents=True, exist_ok=True)
-    print(f"[watcher] watching {RAW_ROOT}")
-    observer = Observer()
-    observer.schedule(Handler(), str(RAW_ROOT), recursive=True)
-    observer.start()
+def handle_upload(path: Path) -> None:
+    """Entry point for each file the FTP server has fully received."""
+    if not _is_image(path):
+        return
     try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
-
-
-if __name__ == "__main__":
-    main()
+        process_image(path)
+    except Exception as e:  # noqa: BLE001
+        print(f"[ingest] error processing {path}: {e}")

@@ -73,7 +73,7 @@ def make_event(client, make_photographer):
 
 
 def ingest_photo(client, photographer_id, name="shot.jpg", faces=None):
-    """Helper: register a photo the way the watcher would (per photographer;
+    """Helper: register a photo the way the FTP ingest pipeline would (per photographer;
     the API resolves the active event)."""
     return client.post(
         "/internal/ingest",

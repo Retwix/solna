@@ -4,7 +4,7 @@ A small pyftpdlib server that authenticates each login against the Solna
 `photographers` table: the STABLE FTP username/password returned once at
 account creation (entered into the camera once, never changed per event). On a
 successful login the user is chrooted into their account's intake directory
-(raw/{photographer_id}), so uploads land exactly where the watcher observes
+(raw/{photographer_id}), so uploads land in the photographer's own intake directory
 and one photographer can only ever write to their own space. Which event a
 photo belongs to is resolved later by the API (the account's active event).
 
@@ -13,6 +13,7 @@ credentials from the photographer-creation response. FTP_PASV_ADDRESS must be
 that same LAN IP so passive-mode data transfers work from a separate device.
 """
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import psycopg
@@ -20,6 +21,7 @@ from pyftpdlib.authorizers import AuthenticationFailed
 from pyftpdlib.handlers import FTPHandler
 from pyftpdlib.servers import FTPServer
 
+import ingest
 from passwords import verify_password
 
 # psycopg wants a plain libpq URL (strip the SQLAlchemy +psycopg dialect tag).
@@ -83,9 +85,25 @@ class PhotographerAuthorizer:
         pass
 
 
+def make_handler(authorizer, on_photo):
+    """FTP handler that hands each completely received file to `on_photo`.
+
+    pyftpdlib fires on_file_received only once the transfer has finished, so
+    a camera pausing mid-upload never yields a half-written photo. Processing
+    runs on one background worker so slow ingestion never blocks FTP clients.
+    """
+    worker = ThreadPoolExecutor(max_workers=1)
+
+    class IngestingHandler(FTPHandler):
+        def on_file_received(self, file):
+            worker.submit(on_photo, Path(file))
+
+    IngestingHandler.authorizer = authorizer
+    return IngestingHandler
+
+
 def main():
-    handler = FTPHandler
-    handler.authorizer = PhotographerAuthorizer()
+    handler = make_handler(PhotographerAuthorizer(), ingest.handle_upload)
     handler.passive_ports = range(PASV_MIN, PASV_MAX + 1)
     if PASV_ADDRESS:
         # Address advertised to clients for passive connections (your LAN IP).

@@ -10,7 +10,7 @@ settings = get_settings()
 
 
 def require_ingest_key(x_ingest_key: str = Header(default="")) -> None:
-    """Shared-secret auth for the internal ingest endpoint (watcher -> API)."""
+    """Shared-secret auth for the internal ingest endpoint (FTP ingest -> API)."""
     if x_ingest_key != settings.ingest_api_key:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid ingest key")
 

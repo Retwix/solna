@@ -1,4 +1,4 @@
-"""Behaviour: the watcher's photo-processing rules (the V0 'process' step)."""
+"""Behaviour: the FTP ingest pipeline (upload received -> processed)."""
 import io
 
 from PIL import Image
@@ -41,10 +41,66 @@ def test_photographer_id_is_parsed_from_intake_path():
 
 
 def test_only_image_files_are_processed():
-    """Non-image files (e.g. a stray .txt) are ignored by the watcher."""
+    """Non-image files (e.g. a stray .txt) are ignored by the pipeline."""
     import ingest
     from pathlib import Path
 
     assert ingest._is_image(Path("a.JPG"))
     assert ingest._is_image(Path("a.png"))
     assert not ingest._is_image(Path("notes.txt"))
+
+
+def test_a_photo_is_processed_once_its_upload_completes_not_while_it_stalls(tmp_path):
+    """A camera on flaky Wi-Fi pauses mid-upload. The photo must reach the
+    pipeline exactly once, whole, after the transfer ends — never half-written."""
+    import ftplib
+    import threading
+    import time
+
+    from pyftpdlib.authorizers import DummyAuthorizer
+    from pyftpdlib.servers import FTPServer
+
+    import server
+
+    home = tmp_path / "raw" / "ph-1"
+    home.mkdir(parents=True)
+    authorizer = DummyAuthorizer()
+    authorizer.add_user("cam", "pw", str(home), perm="elradfmwMT")
+
+    received = []
+    done = threading.Event()
+
+    def on_photo(path):
+        received.append((path.name, path.read_bytes()))
+        done.set()
+
+    ftpd = FTPServer(("127.0.0.1", 0), server.make_handler(authorizer, on_photo))
+    stop = threading.Event()
+
+    def serve():
+        while not stop.is_set():
+            ftpd.serve_forever(timeout=0.05, blocking=False)
+
+    loop = threading.Thread(target=serve, daemon=True)
+    loop.start()
+    try:
+        ftp = ftplib.FTP()
+        ftp.connect("127.0.0.1", ftpd.address[1])
+        ftp.login("cam", "pw")
+        photo = b"\xff\xd8" + b"x" * 200_000
+        data = ftp.transfercmd("STOR DSC00001.JPG")
+        data.sendall(photo[:100_000])
+        time.sleep(1.0)
+        processed_during_stall = list(received)
+        data.sendall(photo[100_000:])
+        data.close()
+        ftp.voidresp()
+        ftp.quit()
+
+        assert done.wait(timeout=5)
+        assert processed_during_stall == []
+        assert received == [("DSC00001.JPG", photo)]
+    finally:
+        stop.set()
+        loop.join(timeout=5)
+        ftpd.close_all()

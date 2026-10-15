@@ -1,6 +1,6 @@
-"""Behaviour: the internal ingest endpoint (watcher -> API).
+"""Behaviour: the internal ingest endpoint (FTP ingest -> API).
 
-The watcher posts the photographer it saw the file under; the API resolves
+The FTP ingest pipeline posts the photographer it saw the file under; the API resolves
 which event (if any) is live for that account.
 """
 from conftest import ingest_photo
