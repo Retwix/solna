@@ -104,3 +104,66 @@ def test_a_photo_is_processed_once_its_upload_completes_not_while_it_stalls(tmp_
         stop.set()
         loop.join(timeout=5)
         ftpd.close_all()
+
+
+class _FakeStorage:
+    def __init__(self):
+        self.objects = {}
+
+    def put_object(self, Bucket, Key, Body, ContentType):
+        self.objects[Key] = Body
+
+
+class _FakeResponse:
+    def __init__(self, payload=None):
+        self._payload = payload or {}
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return self._payload
+
+
+def _fake_backends(monkeypatch):
+    """Stand-ins for the network boundaries: S3, the face service and the API.
+    Returns (storage, ingested) so tests can read what reached them."""
+    import ingest
+
+    storage = _FakeStorage()
+    ingested = []
+
+    def post(url, json=None, files=None, headers=None, timeout=None):
+        if url.endswith("/internal/ingest"):
+            ingested.append(json)
+        return _FakeResponse({"faces": []})
+
+    monkeypatch.setattr(ingest, "s3", storage)
+    monkeypatch.setattr(ingest.requests, "post", post)
+    return storage, ingested
+
+
+def _drop(photographer_id, name, data):
+    import ingest
+
+    path = ingest.RAW_ROOT / photographer_id / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    return path
+
+
+def test_a_reused_camera_filename_never_overwrites_an_earlier_photo(monkeypatch):
+    """Cameras restart their numbering (new card, counter wrap, next event), so
+    the same filename arrives twice. Both photos must survive in storage."""
+    import ingest
+
+    storage, ingested = _fake_backends(monkeypatch)
+    first, second = _img_bytes((40, 30)), _img_bytes((30, 40))
+
+    ingest.process_image(_drop("ph-1", "DSC00042.JPG", first))
+    ingest.process_image(_drop("ph-1", "DSC00042.JPG", second))
+
+    raw_keys = [p["s3_raw_key"] for p in ingested]
+    thumb_keys = [p["s3_thumb_key"] for p in ingested]
+    assert [storage.objects[k] for k in raw_keys] == [first, second]
+    assert [Image.open(io.BytesIO(storage.objects[k])).size for k in thumb_keys] == [(40, 30), (30, 40)]

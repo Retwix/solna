@@ -14,6 +14,7 @@ time) against these stored embeddings.
 """
 import io
 import os
+import uuid
 from pathlib import Path
 
 import boto3
@@ -72,8 +73,9 @@ def process_image(path: Path) -> None:
     data = path.read_bytes()
     name = path.name
 
-    raw_key = f"raw/{photographer_id}/{name}"
-    thumb_key = f"thumbs/{photographer_id}/{name}"
+    stored_name = f"{uuid.uuid4().hex}-{name}"
+    raw_key = f"raw/{photographer_id}/{stored_name}"
+    thumb_key = f"thumbs/{photographer_id}/{stored_name}"
 
     s3.put_object(Bucket=S3_BUCKET, Key=raw_key, Body=data, ContentType="image/jpeg")
 
