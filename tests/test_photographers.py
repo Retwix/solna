@@ -4,9 +4,6 @@ The design (docs/design/photographer-accounts.md): a photographer enters FTP
 credentials into their camera ONCE. Per event they press "go live"; incoming
 photos are routed to whichever event is live, or held in an unassigned tray.
 """
-import os
-from pathlib import Path
-
 from conftest import INGEST_KEY, ingest_photo, token_from_gallery_url
 
 
@@ -22,13 +19,6 @@ def test_photographer_gets_stable_ftp_credentials(make_photographer):
     assert ftp["username"].startswith("sol_")
     assert ftp["password"]
     assert ftp["host"] and ftp["port"]
-
-
-def test_photographer_creation_provisions_the_intake_dir(make_photographer):
-    """The FTP landing dir raw/{photographer_id}/ exists after creation."""
-    p = make_photographer("With Intake Dir")
-    intake = Path(os.environ["FTP_ROOT"]) / "raw" / p["id"]
-    assert intake.is_dir()
 
 
 def test_two_photographers_are_isolated(make_photographer):

@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from config import get_settings
 from database import get_db
-from ftp_provision import ensure_photographer_intake_dir
 from models import Photo, Photographer
 from schemas import FtpCredentials, PhotoOut, PhotographerCreate, PhotographerCreated, PhotoPage
 from security import hash_password
@@ -33,9 +32,6 @@ def create_photographer(payload: PhotographerCreate, db: Session = Depends(get_d
     db.add(photographer)
     db.commit()
     db.refresh(photographer)
-
-    # Stable landing dir: raw/{photographer_id}/ — where the watcher looks.
-    ensure_photographer_intake_dir(photographer.id)
 
     return PhotographerCreated(
         id=photographer.id,

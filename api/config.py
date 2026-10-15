@@ -22,7 +22,6 @@ class Settings(BaseSettings):
 
     ftp_host: str = "localhost"
     ftp_port: int = 21
-    ftp_root: str = "/data/ftp"
 
     # Face matching (V1)
     face_service_url: str = "http://faceservice:9000"

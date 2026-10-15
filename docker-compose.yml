@@ -56,8 +56,6 @@ services:
         condition: service_healthy
     ports:
       - "8080:8000"   # API on host 8080
-    volumes:
-      - ftpdata:/data/ftp
 
   # Facial recognition (V1): detect + embed faces. Both the FTP server (on ingest)
   # and the API (on guest selfie) call it. Set FACE_ENGINE=fake in .env to run
