@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 from config import get_settings
 from database import SessionLocal, get_db
 from models import Event, Photo
-from schemas import EventPublic, PhotoOut, PhotoPage
-from storage import public_url
+from schemas import EventPublic, PhotoPage
+from storage import photo_out
 
 router = APIRouter(prefix="/g", tags=["gallery"])
 settings = get_settings()
@@ -29,15 +29,6 @@ def _get_open_album(db: Session, token: str) -> Event:
     if not event.full_album:
         raise HTTPException(status_code=404, detail="gallery not found")
     return event
-
-
-def _photo_out(p: Photo) -> PhotoOut:
-    return PhotoOut(
-        id=p.id,
-        url=public_url(p.s3_raw_key),
-        thumb_url=public_url(p.s3_thumb_key),
-        created_at=p.created_at,
-    )
 
 
 @router.get("/{token}", response_model=EventPublic)
@@ -70,7 +61,7 @@ def gallery_photos(
 
     photos = list(db.scalars(stmt))
     cursor = photos[-1].id if photos else since
-    return PhotoPage(photos=[_photo_out(p) for p in photos], cursor=cursor)
+    return PhotoPage(photos=[photo_out(p) for p in photos], cursor=cursor)
 
 
 @router.get("/{token}/stream")
@@ -96,7 +87,7 @@ def gallery_stream(token: str, db: Session = Depends(get_db)):
                 stmt = stmt.order_by(Photo.created_at.asc())
                 for p in db.scalars(stmt):
                     last_created = p.created_at
-                    yield f"data: {json.dumps(_photo_out(p).model_dump(mode='json'))}\n\n"
+                    yield f"data: {json.dumps(photo_out(p).model_dump(mode='json'))}\n\n"
             finally:
                 db.close()
             await asyncio.sleep(settings.gallery_poll_interval_ms / 1000)

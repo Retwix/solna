@@ -8,6 +8,7 @@ import boto3
 from botocore.client import Config
 
 from config import get_settings
+from schemas import PhotoOut
 
 settings = get_settings()
 
@@ -48,11 +49,21 @@ _public_s3 = boto3.client(
 PHOTO_LINK_TTL_SECONDS = 7 * 24 * 3600  # SigV4 maximum; links are re-signed on every fetch
 
 
-def public_url(key: str | None) -> str | None:
+def _link(key: str | None) -> str | None:
     if not key:
         return None
     return _public_s3.generate_presigned_url(
         "get_object",
         Params={"Bucket": settings.s3_bucket, "Key": key},
         ExpiresIn=PHOTO_LINK_TTL_SECONDS,
+    )
+
+
+def photo_out(photo) -> PhotoOut:
+    """How a photo is handed to a browser: signed links, never raw keys."""
+    return PhotoOut(
+        id=photo.id,
+        url=_link(photo.s3_raw_key),
+        thumb_url=_link(photo.s3_thumb_key),
+        created_at=photo.created_at,
     )
