@@ -58,7 +58,7 @@ def _result(db: Session, matched_ids: list[str], faces_detected: int, guest_toke
 
 
 @router.post("/{token}/match", response_model=MatchResult)
-async def match(
+def match(
     token: str,
     file: UploadFile,
     email: str = Form(...),
@@ -70,7 +70,7 @@ async def match(
     """
     event = _get_active_event(db, token)
 
-    selfie = await file.read()
+    selfie = file.file.read()
     if not selfie:
         raise HTTPException(status_code=400, detail="empty selfie")
 

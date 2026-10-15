@@ -162,3 +162,43 @@ def test_match_rejects_selfie_with_no_face(client, make_event, monkeypatch):
         files={"file": ("selfie.jpg", b"x", "image/jpeg")},
     )
     assert r.status_code == 422
+
+
+def test_a_slow_face_service_does_not_stall_other_requests(client, make_event, monkeypatch):
+    """While one guest's selfie waits on the face service, the API keeps
+    answering everyone else (live galleries, other guests)."""
+    import threading
+
+    import face_client
+
+    event = make_event("Busy Event")
+    token = token_from_gallery_url(event["gallery_url"])
+    selfie_in_flight = threading.Event()
+    release_face_service = threading.Event()
+
+    def slow_embed(data, filename="selfie.jpg"):
+        selfie_in_flight.set()
+        release_face_service.wait(timeout=5)
+        return [{"embedding": [1.0, 0.0, 0.0], "det_score": 0.99}]
+
+    monkeypatch.setattr(face_client, "embed_image", slow_embed)
+
+    selfie = threading.Thread(target=lambda: client.post(
+        f"/g/{token}/match",
+        data={"email": "guest@example.com"},
+        files={"file": ("selfie.jpg", b"fake-bytes", "image/jpeg")},
+    ))
+    selfie.start()
+    assert selfie_in_flight.wait(timeout=5)
+
+    other = {}
+    meta = threading.Thread(target=lambda: other.update(r=client.get(f"/g/{token}")))
+    meta.start()
+    meta.join(timeout=2)
+    answered_while_selfie_pending = not meta.is_alive()
+
+    release_face_service.set()
+    selfie.join(timeout=5)
+    meta.join(timeout=5)
+    assert answered_while_selfie_pending
+    assert other["r"].status_code == 200
