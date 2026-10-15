@@ -37,6 +37,15 @@ class EventCreated(BaseModel):
     qr_png_base64: str
 
 
+class EventUpdate(BaseModel):
+    full_album: bool
+
+
+class EventSettings(BaseModel):
+    id: str
+    full_album: bool
+
+
 class LiveStatus(BaseModel):
     photographer_id: str
     active_event_id: str | None
@@ -50,6 +59,7 @@ class EventPublic(BaseModel):
     name: str
     photo_count: int
     poll_interval_ms: int
+    full_album: bool
 
 
 class PhotoOut(BaseModel):

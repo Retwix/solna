@@ -23,6 +23,14 @@ def _get_active_event(db: Session, token: str) -> Event:
     return event
 
 
+def _get_open_album(db: Session, token: str) -> Event:
+    """The full album exists only when the photographer opened it."""
+    event = _get_active_event(db, token)
+    if not event.full_album:
+        raise HTTPException(status_code=404, detail="gallery not found")
+    return event
+
+
 def _photo_out(p: Photo) -> PhotoOut:
     return PhotoOut(
         id=p.id,
@@ -40,6 +48,7 @@ def gallery_meta(token: str, db: Session = Depends(get_db)):
         name=event.name,
         photo_count=count,
         poll_interval_ms=settings.gallery_poll_interval_ms,
+        full_album=event.full_album,
     )
 
 
@@ -50,7 +59,7 @@ def gallery_photos(
     limit: int = Query(default=100, le=500),
     db: Session = Depends(get_db),
 ):
-    event = _get_active_event(db, token)
+    event = _get_open_album(db, token)
 
     stmt = select(Photo).where(Photo.event_id == event.id, Photo.status == "ready")
     if since:
@@ -65,12 +74,13 @@ def gallery_photos(
 
 
 @router.get("/{token}/stream")
-async def gallery_stream(token: str):
+def gallery_stream(token: str, db: Session = Depends(get_db)):
     """Server-Sent Events: push new photos as they arrive (live gallery).
 
     Simple poll-the-DB-and-emit loop. Fine for V0 volumes; V1 can swap in a
     queue/pubsub without changing the client contract.
     """
+    _get_open_album(db, token)
 
     async def event_generator():
         last_created = None

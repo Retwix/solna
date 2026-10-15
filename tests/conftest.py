@@ -56,7 +56,7 @@ def make_event(client, make_photographer):
     """Create a photographer + event and go live, so ingested photos land in
     this event (the common case most tests need). Returns the event payload
     with the photographer attached under "photographer"."""
-    def _make(name="Summer Wedding", photographer=None, live=True):
+    def _make(name="Summer Wedding", photographer=None, live=True, full_album=False):
         photographer = photographer or make_photographer(f"{name} Photographer")
         resp = client.post(
             "/events", json={"name": name, "photographer_id": photographer["id"]}
@@ -65,6 +65,9 @@ def make_event(client, make_photographer):
         event = resp.json()
         if live:
             r = client.post(f"/events/{event['id']}/go-live")
+            assert r.status_code == 200, r.text
+        if full_album:
+            r = client.patch(f"/events/{event['id']}", json={"full_album": True})
             assert r.status_code == 200, r.text
         event["photographer"] = photographer
         return event

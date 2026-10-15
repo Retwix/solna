@@ -31,7 +31,7 @@ def test_two_photographers_are_isolated(make_photographer):
 
 def test_ingest_while_live_lands_ready_in_the_active_event(client, make_event):
     """Live event + incoming photo => photo is ready and visible in that gallery."""
-    event = make_event("Live Event")
+    event = make_event("Live Event", full_album=True)
     pid = event["photographer"]["id"]
 
     assert ingest_photo(client, pid).status_code == 200
@@ -43,7 +43,7 @@ def test_ingest_while_live_lands_ready_in_the_active_event(client, make_event):
 
 def test_ingest_while_not_live_is_held_unassigned(client, make_event):
     """No live event => the photo is never lost, but shows in no gallery."""
-    event = make_event("Quiet Event", live=False)
+    event = make_event("Quiet Event", live=False, full_album=True)
     pid = event["photographer"]["id"]
 
     assert ingest_photo(client, pid, "early.jpg").status_code == 200
@@ -58,8 +58,8 @@ def test_ingest_while_not_live_is_held_unassigned(client, make_event):
 def test_go_live_switches_the_active_event(client, make_photographer, make_event):
     """One live event per account: going live on B stops routing to A."""
     p = make_photographer("Switcher")
-    a = make_event("Event A", photographer=p, live=True)
-    b = make_event("Event B", photographer=p, live=False)
+    a = make_event("Event A", photographer=p, live=True, full_album=True)
+    b = make_event("Event B", photographer=p, live=False, full_album=True)
 
     ingest_photo(client, p["id"], "for-a.jpg")
     assert client.post(f"/events/{b['id']}/go-live").status_code == 200
@@ -75,7 +75,7 @@ def test_go_live_switches_the_active_event(client, make_photographer, make_event
 
 def test_stop_clears_the_active_event(client, make_event):
     """After stop, incoming photos are unassigned again."""
-    event = make_event("Stoppable")
+    event = make_event("Stoppable", full_album=True)
     pid = event["photographer"]["id"]
 
     assert client.post(f"/events/{event['id']}/stop").status_code == 200
@@ -90,7 +90,7 @@ def test_stop_clears_the_active_event(client, make_event):
 
 def test_claim_unassigned_moves_the_tray_into_an_event(client, make_event):
     """Forgot to go live: bulk-claim attaches the tray to the event."""
-    event = make_event("Forgot Go Live", live=False)
+    event = make_event("Forgot Go Live", live=False, full_album=True)
     pid = event["photographer"]["id"]
 
     ingest_photo(client, pid, "one.jpg")
@@ -108,8 +108,8 @@ def test_claim_unassigned_moves_the_tray_into_an_event(client, make_event):
 def test_a_single_photo_can_be_moved_between_events(client, make_photographer, make_event):
     """Manual fixup: PATCH a photo from one event to another."""
     p = make_photographer("Mover")
-    a = make_event("Event A", photographer=p, live=True)
-    b = make_event("Event B", photographer=p, live=False)
+    a = make_event("Event A", photographer=p, live=True, full_album=True)
+    b = make_event("Event B", photographer=p, live=False, full_album=True)
 
     photo_id = ingest_photo(client, p["id"], "misfiled.jpg").json()["id"]
 

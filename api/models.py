@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -53,6 +53,8 @@ class Event(Base):
     gallery_token: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
     # status: active | disabled
     status: Mapped[str] = mapped_column(String, default="active", nullable=False)
+    # Off: a guest only sees their own matches. On: the whole event is browsable.
+    full_album: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     photos: Mapped[list["Photo"]] = relationship(back_populates="event")
