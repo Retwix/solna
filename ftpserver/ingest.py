@@ -142,3 +142,9 @@ def handle_upload(path: Path) -> None:
         process_image(path)
     except Exception as e:  # noqa: BLE001
         print(f"[ingest] error processing {path}: {e}")
+
+
+def recover_inbox() -> None:
+    """Ingest photos left in the inbox by a crash or a long API outage."""
+    for path in RAW_ROOT.glob("*/*"):
+        handle_upload(path)

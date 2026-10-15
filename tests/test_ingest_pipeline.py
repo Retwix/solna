@@ -1,7 +1,16 @@
 """Behaviour: the FTP ingest pipeline (upload received -> processed)."""
 import io
 
+import pytest
 from PIL import Image
+
+
+@pytest.fixture()
+def inbox(tmp_path, monkeypatch):
+    """A fresh FTP intake root per test, so leftover photos never leak."""
+    import ingest
+
+    monkeypatch.setattr(ingest, "RAW_ROOT", tmp_path / "raw")
 
 
 def _img_bytes(size, mode="RGB", fmt="JPEG"):
@@ -157,7 +166,7 @@ def _drop(photographer_id, name, data):
     return path
 
 
-def test_a_reused_camera_filename_never_overwrites_an_earlier_photo(monkeypatch):
+def test_a_reused_camera_filename_never_overwrites_an_earlier_photo(monkeypatch, inbox):
     """Cameras restart their numbering (new card, counter wrap, next event), so
     the same filename arrives twice. Both photos must survive in storage."""
     import ingest
@@ -174,7 +183,7 @@ def test_a_reused_camera_filename_never_overwrites_an_earlier_photo(monkeypatch)
     assert [Image.open(io.BytesIO(storage.objects[k])).size for k in thumb_keys] == [(40, 30), (30, 40)]
 
 
-def test_a_photo_survives_a_brief_api_outage(monkeypatch):
+def test_a_photo_survives_a_brief_api_outage(monkeypatch, inbox):
     """The API restarting (deploy, crash) while a photo arrives must not lose it."""
     import ingest
 
@@ -188,7 +197,7 @@ def test_a_photo_survives_a_brief_api_outage(monkeypatch):
     assert len(waits) == 2 and all(w > 0 for w in waits)  # backs off, doesn't hammer
 
 
-def test_the_inbox_keeps_only_photos_not_yet_ingested(monkeypatch):
+def test_the_inbox_keeps_only_photos_not_yet_ingested(monkeypatch, inbox):
     """A registered photo leaves the FTP inbox (storage has it); one the API
     never accepted stays there to be retried on the next start."""
     import ingest
@@ -204,3 +213,19 @@ def test_the_inbox_keeps_only_photos_not_yet_ingested(monkeypatch):
 
     assert not done.exists()
     assert stuck.exists()
+
+
+def test_photos_left_in_the_inbox_are_ingested_when_the_server_starts(monkeypatch, inbox):
+    """Photos the API never accepted (or that arrived while the server was
+    down mid-processing) are picked up on the next start, images only."""
+    import ingest
+
+    _, ingested = _fake_backends(monkeypatch)
+    _drop("ph-1", "DSC00300.JPG", _img_bytes((40, 30)))
+    _drop("ph-2", "IMG_0001.png", _img_bytes((40, 30), fmt="PNG"))
+    notes = _drop("ph-2", "notes.txt", b"not a photo")
+
+    ingest.recover_inbox()
+
+    assert sorted(p["photographer_id"] for p in ingested) == ["ph-1", "ph-2"]
+    assert notes.exists()

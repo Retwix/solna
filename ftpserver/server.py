@@ -99,11 +99,13 @@ def make_handler(authorizer, on_photo):
             worker.submit(on_photo, Path(file))
 
     IngestingHandler.authorizer = authorizer
+    IngestingHandler.worker = worker
     return IngestingHandler
 
 
 def main():
     handler = make_handler(PhotographerAuthorizer(), ingest.handle_upload)
+    handler.worker.submit(ingest.recover_inbox)  # queued: FTP accepts uploads meanwhile
     handler.passive_ports = range(PASV_MIN, PASV_MAX + 1)
     if PASV_ADDRESS:
         # Address advertised to clients for passive connections (your LAN IP).
