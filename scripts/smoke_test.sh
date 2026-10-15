@@ -43,7 +43,7 @@ echo "   event_id   = $EVENT_ID (live)"
 echo "   gallery    = $GALLERY_URL"
 
 echo "3) Uploading a test photo over FTP (as the camera would)..."
-PHOTO="$(mktemp -t solna-smoke).jpg"
+PHOTO="$(mktemp -t solna-smoke.XXXXXX).jpg"
 docker compose exec -T api python -c '
 import io, sys
 from PIL import Image
