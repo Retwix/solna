@@ -14,6 +14,7 @@ time) against these stored embeddings.
 """
 import io
 import os
+import time
 import uuid
 from pathlib import Path
 
@@ -33,6 +34,7 @@ FACE_SERVICE_URL = os.getenv("FACE_SERVICE_URL", "http://faceservice:9000")
 S3_BUCKET = os.getenv("S3_BUCKET", "solna-media")
 THUMB_MAX = 800  # longest edge, px
 VALID_EXT = {".jpg", ".jpeg", ".png"}
+INGEST_ATTEMPTS = 5  # backoff 1+2+4+8 s rides out an API restart
 
 s3 = boto3.client(
     "s3",
@@ -90,19 +92,28 @@ def process_image(path: Path) -> None:
     # drop the photo — it still belongs in the gallery, just without matches.
     faces = _embed_faces(data, name)
 
-    resp = requests.post(
-        INGEST_URL,
-        json={
-            "photographer_id": photographer_id,
-            "s3_raw_key": raw_key,
-            "s3_thumb_key": thumb_key,
-            "faces": faces,
-        },
-        headers={"X-Ingest-Key": INGEST_KEY},
-        timeout=30,
-    )
-    resp.raise_for_status()
+    _notify_api({
+        "photographer_id": photographer_id,
+        "s3_raw_key": raw_key,
+        "s3_thumb_key": thumb_key,
+        "faces": faces,
+    })
+    path.unlink()
     print(f"[ingest] ingested {raw_key} ({len(faces)} face(s))")
+
+
+def _notify_api(payload: dict) -> None:
+    for attempt in range(INGEST_ATTEMPTS):
+        try:
+            resp = requests.post(
+                INGEST_URL, json=payload, headers={"X-Ingest-Key": INGEST_KEY}, timeout=30
+            )
+            resp.raise_for_status()
+            return
+        except requests.RequestException:
+            if attempt == INGEST_ATTEMPTS - 1:
+                raise
+            time.sleep(2 ** attempt)
 
 
 def _embed_faces(data: bytes, name: str) -> list:

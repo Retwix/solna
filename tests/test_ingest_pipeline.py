@@ -125,16 +125,21 @@ class _FakeResponse:
         return self._payload
 
 
-def _fake_backends(monkeypatch):
-    """Stand-ins for the network boundaries: S3, the face service and the API.
-    Returns (storage, ingested) so tests can read what reached them."""
+def _fake_backends(monkeypatch, api_down_for=0):
+    """Stand-ins for the network boundaries: S3, the face service and the API
+    (unreachable for its first `api_down_for` calls). Returns (storage,
+    ingested) so tests can read what reached them."""
     import ingest
 
     storage = _FakeStorage()
     ingested = []
+    api_calls = []
 
     def post(url, json=None, files=None, headers=None, timeout=None):
         if url.endswith("/internal/ingest"):
+            api_calls.append(json)
+            if len(api_calls) <= api_down_for:
+                raise ingest.requests.ConnectionError("api unreachable")
             ingested.append(json)
         return _FakeResponse({"faces": []})
 
@@ -167,3 +172,35 @@ def test_a_reused_camera_filename_never_overwrites_an_earlier_photo(monkeypatch)
     thumb_keys = [p["s3_thumb_key"] for p in ingested]
     assert [storage.objects[k] for k in raw_keys] == [first, second]
     assert [Image.open(io.BytesIO(storage.objects[k])).size for k in thumb_keys] == [(40, 30), (30, 40)]
+
+
+def test_a_photo_survives_a_brief_api_outage(monkeypatch):
+    """The API restarting (deploy, crash) while a photo arrives must not lose it."""
+    import ingest
+
+    _, ingested = _fake_backends(monkeypatch, api_down_for=2)
+    waits = []
+    monkeypatch.setattr("time.sleep", waits.append)
+
+    ingest.process_image(_drop("ph-1", "DSC00100.JPG", _img_bytes((40, 30))))
+
+    assert len(ingested) == 1
+    assert len(waits) == 2 and all(w > 0 for w in waits)  # backs off, doesn't hammer
+
+
+def test_the_inbox_keeps_only_photos_not_yet_ingested(monkeypatch):
+    """A registered photo leaves the FTP inbox (storage has it); one the API
+    never accepted stays there to be retried on the next start."""
+    import ingest
+
+    monkeypatch.setattr("time.sleep", lambda seconds: None)
+    _fake_backends(monkeypatch)
+    done = _drop("ph-1", "DSC00200.JPG", _img_bytes((40, 30)))
+    ingest.handle_upload(done)
+
+    _fake_backends(monkeypatch, api_down_for=ingest.INGEST_ATTEMPTS)
+    stuck = _drop("ph-1", "DSC00201.JPG", _img_bytes((40, 30)))
+    ingest.handle_upload(stuck)
+
+    assert not done.exists()
+    assert stuck.exists()
