@@ -4,7 +4,7 @@ The design (docs/design/photographer-accounts.md): a photographer enters FTP
 credentials into their camera ONCE. Per event they press "go live"; incoming
 photos are routed to whichever event is live, or held in an unassigned tray.
 """
-from conftest import INGEST_KEY, ingest_photo, token_from_gallery_url
+from conftest import INGEST_KEY, ingest_photo, photo_name, token_from_gallery_url
 
 
 # --- The account: stable FTP credentials --------------------------------------
@@ -67,8 +67,8 @@ def test_go_live_switches_the_active_event(client, make_photographer, make_event
 
     token_a = token_from_gallery_url(a["gallery_url"])
     token_b = token_from_gallery_url(b["gallery_url"])
-    names_a = [x["url"].rsplit("/", 1)[1] for x in client.get(f"/g/{token_a}/photos").json()["photos"]]
-    names_b = [x["url"].rsplit("/", 1)[1] for x in client.get(f"/g/{token_b}/photos").json()["photos"]]
+    names_a = [photo_name(x["url"]) for x in client.get(f"/g/{token_a}/photos").json()["photos"]]
+    names_b = [photo_name(x["url"]) for x in client.get(f"/g/{token_b}/photos").json()["photos"]]
     assert names_a == ["for-a.jpg"]
     assert names_b == ["for-b.jpg"]
 

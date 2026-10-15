@@ -18,19 +18,27 @@ def test_ingest_requires_the_shared_secret(client, make_event):
                        headers={"X-Ingest-Key": "wrong"}).status_code == 401
 
 
-def test_ingest_with_valid_key_registers_a_ready_photo(client, make_event):
-    """With the right key, the photo is stored and exposed with public URLs."""
-    event = make_event("Good Auth Event")
-    pid = event["photographer"]["id"]
-
-    resp = ingest_photo(client, pid, "x.jpg")
-    assert resp.status_code == 200
-    photo = resp.json()
-    assert photo["url"].endswith(f"raw/{pid}/x.jpg")
-    assert photo["id"]
-
-
 def test_ingest_for_unknown_photographer_is_rejected(client):
     """A path that doesn't map to an account must not create orphan photos."""
     resp = ingest_photo(client, "not-a-real-photographer")
     assert resp.status_code == 404
+
+
+def test_photo_links_are_expiring_signed_urls_on_the_public_endpoint(client, make_event):
+    """The bucket is private: a photo is only reachable through a signed,
+    time-limited link that a guest's browser can open."""
+    from urllib.parse import parse_qs, urlsplit
+
+    event = make_event("Signed Links Event")
+    pid = event["photographer"]["id"]
+
+    photo = ingest_photo(client, pid, "x.jpg").json()
+
+    for link in (photo["url"], photo["thumb_url"]):
+        parts = urlsplit(link)
+        query = parse_qs(parts.query)
+        assert f"{parts.scheme}://{parts.netloc}" == "http://test-s3"
+        assert parts.path.startswith(f"/solna-media/")
+        assert "X-Amz-Signature" in query and "X-Amz-Expires" in query
+    assert urlsplit(photo["url"]).path == f"/solna-media/raw/{pid}/x.jpg"
+    assert urlsplit(photo["thumb_url"]).path == f"/solna-media/thumbs/{pid}/x.jpg"

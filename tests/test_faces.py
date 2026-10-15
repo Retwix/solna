@@ -4,7 +4,7 @@ import json
 import pytest
 from sqlalchemy import select
 
-from conftest import ingest_photo, token_from_gallery_url
+from conftest import ingest_photo, photo_name, token_from_gallery_url
 
 
 def _ingest(client, event, name, embeddings):
@@ -57,7 +57,7 @@ def test_selfie_match_returns_photos_the_guest_appears_in(client, make_event, mo
     assert r.status_code == 200
     body = r.json()
     assert body["match_count"] == 1
-    assert body["photos"][0]["url"].endswith("me.jpg")
+    assert photo_name(body["photos"][0]["url"]) == "me.jpg"
 
 
 def test_match_persists_the_guest(client, make_event, monkeypatch):
@@ -120,7 +120,7 @@ def test_returning_guest_refetches_matches_without_a_new_selfie(client, make_eve
     assert r.status_code == 200
     body = r.json()
     assert body["match_count"] == 2
-    names = sorted(p["url"].rsplit("/", 1)[1] for p in body["photos"])
+    names = sorted(photo_name(p["url"]) for p in body["photos"])
     assert names == ["me-1.jpg", "me-2.jpg"]
 
 

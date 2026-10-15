@@ -103,5 +103,12 @@ def disable_event(token):
         db.close()
 
 
+def photo_name(url: str) -> str:
+    """The stored filename behind a (signed) photo link."""
+    from urllib.parse import urlsplit
+
+    return urlsplit(url).path.rsplit("/", 1)[1]
+
+
 def token_from_gallery_url(url: str) -> str:
     return url.rsplit("/g/", 1)[1]

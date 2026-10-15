@@ -1,5 +1,5 @@
 """Behaviour: the guest-facing live gallery and its privacy guarantees."""
-from conftest import disable_event, ingest_photo, token_from_gallery_url
+from conftest import disable_event, ingest_photo, photo_name, token_from_gallery_url
 
 
 def test_guest_sees_photos_ingested_for_their_event(client, make_event):
@@ -15,7 +15,7 @@ def test_guest_sees_photos_ingested_for_their_event(client, make_event):
     assert resp.status_code == 200
     photos = resp.json()["photos"]
     assert len(photos) == 1
-    assert photos[0]["url"].endswith(f"raw/{pid}/shot.jpg")
+    assert photo_name(photos[0]["url"]) == "shot.jpg"
     assert photos[0]["thumb_url"] is not None
 
 
@@ -69,7 +69,7 @@ def test_live_polling_returns_only_photos_newer_than_cursor(client, make_event):
 
     ingest_photo(client, pid, "second.jpg")
     page = client.get(f"/g/{token}/photos", params={"since": cursor}).json()
-    names = [p["url"].rsplit("/", 1)[1] for p in page["photos"]]
+    names = [photo_name(p["url"]) for p in page["photos"]]
     assert names == ["second.jpg"]
 
 

@@ -32,7 +32,8 @@ services:
       timeout: 3s
       retries: 10
 
-  # Creates the bucket on startup and makes it publicly readable (V0: public gallery).
+  # Creates the (private) bucket on startup. Browsers get photos through
+  # expiring signed links minted by the API.
   minio-init:
     image: minio/mc:latest
     depends_on:
@@ -42,7 +43,7 @@ services:
       /bin/sh -c "
       mc alias set local http://minio:9000 minioadmin minioadmin &&
       mc mb -p local/solna-media || true &&
-      mc anonymous set download local/solna-media &&
+      mc anonymous set none local/solna-media &&
       echo 'bucket ready'
       "
 

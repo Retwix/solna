@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from conftest import disable_event, ingest_photo, token_from_gallery_url
+from conftest import disable_event, ingest_photo, photo_name, token_from_gallery_url
 
 
 def _ingest(client, event, name, embeddings):
@@ -34,7 +34,7 @@ def _take_selfie(client, monkeypatch, token, embedding):
 
 def _photo_name(sse_event: str) -> str:
     assert sse_event.startswith("data: ")
-    return json.loads(sse_event[len("data: "):])["url"].rsplit("/", 1)[1]
+    return photo_name(json.loads(sse_event[len("data: "):])["url"])
 
 
 def _fast_poll(monkeypatch):

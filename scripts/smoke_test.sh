@@ -56,8 +56,8 @@ echo "   uploaded smoke-1.jpg"
 
 echo "4) Waiting for the photo to appear in the gallery..."
 for i in $(seq 1 20); do
-  COUNT="$(curl -fsS "$API/g/$TOKEN/photos" \
-    | python3 -c 'import json,sys;print(len(json.load(sys.stdin)["photos"]))')"
+  COUNT="$(curl -fsS "$API/g/$TOKEN" \
+    | python3 -c 'import json,sys;print(json.load(sys.stdin)["photo_count"])')"
   if [ "$COUNT" -ge 1 ]; then
     echo "   ✅ gallery now shows $COUNT photo(s) after ~$((i))s"
     echo
