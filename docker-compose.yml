@@ -60,7 +60,8 @@ services:
       - ftpdata:/data/ftp
 
   watcher:
-    build: ./watcher
+    build: ./ftpserver
+    command: ["python", "ingest.py"]
     env_file: .env
     depends_on:
       - api

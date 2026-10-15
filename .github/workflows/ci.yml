@@ -24,7 +24,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r api/requirements.txt
-          pip install -r watcher/requirements.txt
+          pip install -r ftpserver/requirements.txt
           pip install pytest httpx
 
       - name: Run behaviour tests

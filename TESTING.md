@@ -19,7 +19,7 @@ exactly which layer, instead of debugging the whole system at once.
 Fastest confidence, no Docker. From the repo root:
 
 ```bash
-pip install -r api/requirements.txt -r watcher/requirements.txt pytest httpx
+pip install -r api/requirements.txt -r ftpserver/requirements.txt pytest httpx
 pytest -q
 ```
 

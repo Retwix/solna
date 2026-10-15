@@ -1,5 +1,5 @@
-# Install API + watcher deps plus test tooling, then run: pytest
+# Install API + FTP/ingest deps plus test tooling, then run: pytest
 -r api/requirements.txt
--r watcher/requirements.txt
+-r ftpserver/requirements.txt
 pytest==8.3.4
 httpx==0.28.1

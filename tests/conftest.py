@@ -11,7 +11,7 @@ import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "api"))
-sys.path.insert(0, str(ROOT / "watcher"))
+sys.path.insert(0, str(ROOT / "ftpserver"))
 
 # Configure the environment BEFORE importing app modules (settings are cached).
 _TMP = tempfile.mkdtemp(prefix="solna-test-")
