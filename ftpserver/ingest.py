@@ -2,10 +2,11 @@
 
 Runs inside the FTP server: for each image fully received into the intake
 directory ({FTP_ROOT}/raw/{photographer_id}/...) it:
-  1. uploads the original to storage at raw/{photographer_id}/<name>
-  2. generates a thumbnail and uploads it to thumbs/{photographer_id}/<name>
+  1. uploads the original to storage at raw/{photographer_id}/<uuid>-<name>
+  2. generates a thumbnail and uploads it to thumbs/{photographer_id}/<uuid>-<name>
   3. calls the face service to detect + embed faces
   4. notifies the API (/internal/ingest) with the photographer, keys and faces
+  5. removes the file from the inbox (anything left there is still pending)
 
 The pipeline does NOT know the event: it reports who uploaded, and the API
 resolves the account's active event (or holds the photo unassigned). Faces are

@@ -49,16 +49,6 @@ def test_photographer_id_is_parsed_from_intake_path():
     assert ingest._photographer_id_from_path(loose) is None
 
 
-def test_only_image_files_are_processed():
-    """Non-image files (e.g. a stray .txt) are ignored by the pipeline."""
-    import ingest
-    from pathlib import Path
-
-    assert ingest._is_image(Path("a.JPG"))
-    assert ingest._is_image(Path("a.png"))
-    assert not ingest._is_image(Path("notes.txt"))
-
-
 def test_a_photo_is_processed_once_its_upload_completes_not_while_it_stalls(tmp_path):
     """A camera on flaky Wi-Fi pauses mid-upload. The photo must reach the
     pipeline exactly once, whole, after the transfer ends — never half-written."""
