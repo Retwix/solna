@@ -23,10 +23,18 @@ pip install -r api/requirements.txt -r ftpserver/requirements.txt pytest httpx
 pytest -q
 ```
 
-**Success:** `45 passed`. These cover photographer accounts, event creation,
+**Success:** all tests pass (one skipped without Postgres, see below). These cover photographer accounts, event creation,
 go-live routing and the unassigned tray, the gallery, privacy, FTP password
 hashing, the face-matching math, the selfie-match flow (with a stub face
 engine), and the live matched-photo stream. This is also what runs in CI on every push.
+
+The migration test also has a Postgres row, which skips unless `TEST_POSTGRES_URL` points
+at a Postgres server (CI sets it). It creates and drops its own throwaway database there:
+
+```bash
+docker run -d --rm --name solna-test-pg -e POSTGRES_PASSWORD=postgres -p 127.0.0.1:5499:5432 postgres:17
+TEST_POSTGRES_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:5499/postgres pytest -q
+```
 
 ---
 
