@@ -1,22 +1,9 @@
-from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from database import Base, engine
 from routers import events, gallery, ingest, match, photographers, photos
 
-# V0: create tables on startup. (Switch to Alembic migrations before prod.)
-import models  # noqa: F401  (register models on Base)
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
-    yield
-
-
-app = FastAPI(title="Solna API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Solna API", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,

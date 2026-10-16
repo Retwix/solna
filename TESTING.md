@@ -167,5 +167,6 @@ It prints precision/recall/F1 at each threshold and recommends one. Set it in
 | Selfie says "no face detected" | Clearer/closer selfie; check face service is on `insightface`, not `fake`. |
 | Matches look wrong | Threshold not tuned — run Layer 6. |
 | Changed `.env`, no effect | Env is read at container start: `docker compose up -d --force-recreate <service>`. |
+| API exits with `relation "photographers" already exists` | The dev DB predates migrations (the API now runs `alembic upgrade head` at start). Mark it current once: `docker compose run --rm --no-deps api alembic stamp head`. |
 
 **Reset everything (wipes all data):** `docker compose down -v && docker compose up --build`.
