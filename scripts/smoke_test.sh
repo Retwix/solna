@@ -14,6 +14,7 @@ set -euo pipefail
 
 API="${API:-http://localhost:8080}"
 FTP="${FTP:-localhost:2121}"
+FACE="${FACE:-http://localhost:9200}"
 
 echo "1) Creating a photographer account..."
 PHOTOGRAPHER_JSON="$(curl -fsS -X POST "$API/photographers" \
@@ -50,6 +51,8 @@ from PIL import Image
 buf = io.BytesIO()
 Image.new("RGB", (1600, 1200), (90, 140, 200)).save(buf, "JPEG")
 sys.stdout.buffer.write(buf.getvalue())' > "$PHOTO"
+# The first /embed loads (and after `down -v` downloads) the face model.
+curl -fsS --max-time 300 -F "file=@$PHOTO" "$FACE/embed" > /dev/null
 curl -fsS -T "$PHOTO" "ftp://$FTP_USER:$FTP_PASS@$FTP/smoke-1.jpg"
 rm -f "$PHOTO"
 echo "   uploaded smoke-1.jpg"
