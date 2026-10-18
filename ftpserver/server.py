@@ -95,13 +95,16 @@ def make_handler(authorizer, on_photo, retry_after=60):
     pyftpdlib fires on_file_received only once the transfer has finished, so
     a camera pausing mid-upload never yields a half-written photo. Processing
     runs on one background worker so slow ingestion never blocks FTP clients.
-    A photo whose processing raises is queued again after `retry_after` seconds.
+    A photo whose processing raises is queued again after `retry_after` seconds,
+    unless its file is gone.
     """
     worker = ThreadPoolExecutor(max_workers=1)
 
     def ingest_photo(path):
         try:
             on_photo(path)
+        except FileNotFoundError:
+            log.warning("%s is gone from the inbox; not retrying", path)
         except Exception:  # noqa: BLE001
             log.exception("could not ingest %s; retrying in %s s", path, retry_after)
             threading.Timer(retry_after, submit_photo, (path,)).start()

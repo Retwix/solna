@@ -262,3 +262,25 @@ def test_a_photo_whose_ingest_fails_is_retried_without_a_restart(tmp_path):
 
     assert done.wait(timeout=5)
     assert attempts == [tmp_path / "DSC00500.JPG"] * 2
+
+
+def test_a_photo_deleted_before_its_retry_is_dropped_not_retried(tmp_path):
+    """The photographer deleted the file from the inbox: retrying can never
+    succeed, so the server must not try it again every minute forever."""
+    import time
+
+    from pyftpdlib.authorizers import DummyAuthorizer
+
+    import server
+
+    attempts = []
+
+    def on_photo(path):
+        attempts.append(path)
+        raise FileNotFoundError(path)
+
+    handler = server.make_handler(DummyAuthorizer(), on_photo, retry_after=0.01)
+    handler.submit_photo(tmp_path / "DSC00501.JPG")
+
+    time.sleep(0.3)
+    assert attempts == [tmp_path / "DSC00501.JPG"]
