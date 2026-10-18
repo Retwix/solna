@@ -219,3 +219,18 @@ def test_photos_left_in_the_inbox_are_ingested_when_the_server_starts(monkeypatc
 
     assert sorted(p["photographer_id"] for p in ingested) == ["ph-1", "ph-2"]
     assert notes.exists()
+
+
+def test_a_photo_retried_after_a_failed_ingest_is_stored_once(monkeypatch, inbox):
+    """Every retry uploads the original again; it must land on the same object,
+    not leave an orphan copy per attempt."""
+    import ingest
+
+    monkeypatch.setattr("time.sleep", lambda seconds: None)
+    storage, _ = _fake_backends(monkeypatch, api_down_for=ingest.INGEST_ATTEMPTS)
+    photo = _drop("ph-1", "DSC00400.JPG", _img_bytes((40, 30)))
+
+    ingest.handle_upload(photo)
+    ingest.handle_upload(photo)
+
+    assert len(storage.objects) == 2  # one original, one thumbnail

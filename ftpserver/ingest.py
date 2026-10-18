@@ -2,8 +2,8 @@
 
 Runs inside the FTP server: for each image fully received into the intake
 directory ({FTP_ROOT}/raw/{photographer_id}/...) it:
-  1. uploads the original to storage at raw/{photographer_id}/<uuid>-<name>
-  2. generates a thumbnail and uploads it to thumbs/{photographer_id}/<uuid>-<name>
+  1. uploads the original to storage at raw/{photographer_id}/<hash>-<name>
+  2. generates a thumbnail and uploads it to thumbs/{photographer_id}/<hash>-<name>
   3. calls the face service to detect + embed faces
   4. notifies the API (/internal/ingest) with the photographer, keys and faces
   5. removes the file from the inbox (anything left there is still pending)
@@ -13,11 +13,11 @@ resolves the account's active event (or holds the photo unassigned). Faces are
 embedded here, on ingest; matching a specific guest happens later (at selfie
 time) against these stored embeddings.
 """
+import hashlib
 import io
 import logging
 import os
 import time
-import uuid
 from pathlib import Path
 
 import boto3
@@ -79,7 +79,7 @@ def process_image(path: Path) -> None:
     data = path.read_bytes()
     name = path.name
 
-    stored_name = f"{uuid.uuid4().hex}-{name}"
+    stored_name = f"{hashlib.sha256(data).hexdigest()[:32]}-{name}"
     raw_key = f"raw/{photographer_id}/{stored_name}"
     thumb_key = f"thumbs/{photographer_id}/{stored_name}"
 
