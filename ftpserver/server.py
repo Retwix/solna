@@ -12,6 +12,7 @@ Cameras connect with: host = your machine's LAN IP, port 2121, and the
 credentials from the photographer-creation response. FTP_PASV_ADDRESS must be
 that same LAN IP so passive-mode data transfers work from a separate device.
 """
+import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -104,6 +105,7 @@ def make_handler(authorizer, on_photo):
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     handler = make_handler(PhotographerAuthorizer(), ingest.handle_upload)
     handler.worker.submit(ingest.recover_inbox)  # queued: FTP accepts uploads meanwhile
     handler.passive_ports = range(PASV_MIN, PASV_MAX + 1)
@@ -112,8 +114,9 @@ def main():
         handler.masquerade_address = PASV_ADDRESS
 
     server = FTPServer(("0.0.0.0", 21), handler)
-    print(f"[ftpserver] listening on :21  passive={PASV_MIN}-{PASV_MAX}  "
-          f"masquerade={PASV_ADDRESS or '(none)'}")
+    logging.getLogger("ftpserver").info(
+        "listening on :21  passive=%s-%s  masquerade=%s", PASV_MIN, PASV_MAX, PASV_ADDRESS or "(none)"
+    )
     server.serve_forever()
 
 

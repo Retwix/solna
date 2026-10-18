@@ -14,6 +14,7 @@ embedded here, on ingest; matching a specific guest happens later (at selfie
 time) against these stored embeddings.
 """
 import io
+import logging
 import os
 import time
 import uuid
@@ -23,6 +24,8 @@ import boto3
 import requests
 from botocore.client import Config as BotoConfig
 from PIL import Image, ImageOps
+
+log = logging.getLogger("ingest")
 
 FTP_ROOT = os.getenv("FTP_ROOT", "/data/ftp")
 RAW_ROOT = Path(FTP_ROOT) / "raw"
@@ -86,7 +89,7 @@ def process_image(path: Path) -> None:
         thumb = _make_thumbnail(data)
         s3.put_object(Bucket=S3_BUCKET, Key=thumb_key, Body=thumb, ContentType="image/jpeg")
     except Exception as e:  # noqa: BLE001 - a bad thumbnail shouldn't drop the photo
-        print(f"[ingest] thumbnail failed for {name}: {e}")
+        log.warning("thumbnail failed for %s: %s", name, e)
         thumb_key = None
 
     # V1: detect + embed faces via the face service. A failure here must not
@@ -100,7 +103,7 @@ def process_image(path: Path) -> None:
         "faces": faces,
     })
     path.unlink()
-    print(f"[ingest] ingested {raw_key} ({len(faces)} face(s))")
+    log.info("ingested %s (%d face(s))", raw_key, len(faces))
 
 
 def _notify_api(payload: dict) -> None:
@@ -127,7 +130,7 @@ def _embed_faces(data: bytes, name: str) -> list:
         resp.raise_for_status()
         return resp.json().get("faces", [])
     except Exception as e:  # noqa: BLE001
-        print(f"[ingest] face embedding failed for {name}: {e}")
+        log.warning("face embedding failed for %s, stored without faces: %s", name, e)
         return []
 
 
@@ -141,8 +144,8 @@ def handle_upload(path: Path) -> None:
         return
     try:
         process_image(path)
-    except Exception as e:  # noqa: BLE001
-        print(f"[ingest] error processing {path}: {e}")
+    except Exception:  # noqa: BLE001
+        log.exception("could not ingest %s; it stays in the inbox until the next restart", path)
 
 
 def recover_inbox() -> None:
