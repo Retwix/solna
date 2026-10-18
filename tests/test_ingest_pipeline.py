@@ -264,9 +264,26 @@ def test_a_photo_whose_ingest_fails_is_retried_without_a_restart(tmp_path):
     assert attempts == [tmp_path / "DSC00500.JPG"] * 2
 
 
-def test_a_photo_deleted_before_its_retry_is_dropped_not_retried(tmp_path):
-    """The photographer deleted the file from the inbox: retrying can never
-    succeed, so the server must not try it again every minute forever."""
+
+def _api_answer(status):
+    import requests
+
+    response = requests.Response()
+    response.status_code = status
+    return requests.HTTPError(f"{status} from the API", response=response)
+
+
+@pytest.mark.parametrize(
+    ("failure", "retried"),
+    [
+        pytest.param(lambda: FileNotFoundError("deleted from the inbox"), False, id="file gone"),
+        pytest.param(lambda: _api_answer(499), False, id="API rejects the photo"),
+        pytest.param(lambda: _api_answer(500), True, id="API fails"),
+    ],
+)
+def test_a_failed_photo_is_retried_only_when_a_retry_can_succeed(tmp_path, failure, retried):
+    """A deleted file or a photo the API rejects would fail every minute
+    forever; a server error may clear up, so that photo is tried again."""
     import time
 
     from pyftpdlib.authorizers import DummyAuthorizer
@@ -277,10 +294,11 @@ def test_a_photo_deleted_before_its_retry_is_dropped_not_retried(tmp_path):
 
     def on_photo(path):
         attempts.append(path)
-        raise FileNotFoundError(path)
+        if len(attempts) <= 2:
+            raise failure()
 
     handler = server.make_handler(DummyAuthorizer(), on_photo, retry_after=0.01)
     handler.submit_photo(tmp_path / "DSC00501.JPG")
 
     time.sleep(0.3)
-    assert attempts == [tmp_path / "DSC00501.JPG"]
+    assert (len(attempts) > 1) is retried

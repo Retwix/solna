@@ -19,6 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import psycopg
+import requests
 from pyftpdlib.authorizers import AuthenticationFailed
 from pyftpdlib.handlers import FTPHandler
 from pyftpdlib.servers import FTPServer
@@ -89,6 +90,14 @@ class PhotographerAuthorizer:
         pass
 
 
+def _retry_can_succeed(error):
+    if isinstance(error, FileNotFoundError):
+        return False
+    if isinstance(error, requests.HTTPError):
+        return error.response.status_code >= 500
+    return True
+
+
 def make_handler(authorizer, on_photo, retry_after=60):
     """FTP handler that hands each completely received file to `on_photo`.
 
@@ -96,16 +105,17 @@ def make_handler(authorizer, on_photo, retry_after=60):
     a camera pausing mid-upload never yields a half-written photo. Processing
     runs on one background worker so slow ingestion never blocks FTP clients.
     A photo whose processing raises is queued again after `retry_after` seconds,
-    unless its file is gone.
+    unless its file is gone or the API rejected it.
     """
     worker = ThreadPoolExecutor(max_workers=1)
 
     def ingest_photo(path):
         try:
             on_photo(path)
-        except FileNotFoundError:
-            log.warning("%s is gone from the inbox; not retrying", path)
-        except Exception:  # noqa: BLE001
+        except Exception as error:  # noqa: BLE001
+            if not _retry_can_succeed(error):
+                log.exception("could not ingest %s; giving up", path)
+                return
             log.exception("could not ingest %s; retrying in %s s", path, retry_after)
             threading.Timer(retry_after, submit_photo, (path,)).start()
 
