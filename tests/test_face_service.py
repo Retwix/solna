@@ -17,7 +17,8 @@ def load_face_service(monkeypatch):
     models = []
 
     class StandInFaceAnalysis:
-        def __init__(self, name, providers):
+        def __init__(self, name, providers, allowed_modules=None):
+            self.allowed_modules = allowed_modules
             models.append(self)
 
         def prepare(self, ctx_id, det_size):
@@ -50,3 +51,10 @@ def test_the_model_loads_at_startup_only_for_the_real_engine(load_face_service, 
 
     with TestClient(service.app):
         assert len(models) == models_loaded
+
+
+def test_only_the_detection_and_recognition_models_are_loaded(load_face_service):
+    service, models = load_face_service("insightface")
+
+    with TestClient(service.app):
+        assert models[0].allowed_modules == ["detection", "recognition"]

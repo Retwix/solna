@@ -66,6 +66,7 @@ def _get_model():
         from insightface.app import FaceAnalysis
 
         m = FaceAnalysis(name=os.getenv("INSIGHTFACE_MODEL", "buffalo_l"),
+                         allowed_modules=["detection", "recognition"],
                          providers=["CPUExecutionProvider"])
         m.prepare(ctx_id=-1, det_size=(640, 640))
         _model = m
