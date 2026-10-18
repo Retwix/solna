@@ -17,6 +17,7 @@ FACE_ENGINE selects the implementation:
 import hashlib
 import io
 import os
+from contextlib import asynccontextmanager
 
 import numpy as np
 from fastapi import FastAPI, HTTPException, UploadFile
@@ -25,8 +26,17 @@ from PIL import Image, ImageOps
 FACE_ENGINE = os.getenv("FACE_ENGINE", "insightface").lower()
 EMBED_DIM = 512
 
-app = FastAPI(title="Solna Face Service", version="0.1.0")
-_model = None  # lazy-loaded InsightFace model
+_model = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if FACE_ENGINE != "fake":
+        _get_model()
+    yield
+
+
+app = FastAPI(title="Solna Face Service", version="0.1.0", lifespan=lifespan)
 
 
 def _load_image(data: bytes) -> np.ndarray:
@@ -53,7 +63,7 @@ def _embed_fake(rgb: np.ndarray) -> list[dict]:
 def _get_model():
     global _model
     if _model is None:
-        from insightface.app import FaceAnalysis  # imported lazily
+        from insightface.app import FaceAnalysis
 
         m = FaceAnalysis(name=os.getenv("INSIGHTFACE_MODEL", "buffalo_l"),
                          providers=["CPUExecutionProvider"])
