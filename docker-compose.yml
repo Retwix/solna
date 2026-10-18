@@ -45,6 +45,12 @@ services:
         condition: service_healthy
     ports:
       - "8080:8000"   # API on host 8080
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
 
   # Facial recognition (V1): detect + embed faces. Both the FTP server (on ingest)
   # and the API (on guest selfie) call it. Set FACE_ENGINE=fake in .env to run
@@ -56,6 +62,14 @@ services:
       - "9200:9000"   # face service on host 9200 (debugging)
     volumes:
       - facemodels:/root/.insightface   # cache the downloaded model across restarts
+    # Healthy only once the model is loaded (it loads before uvicorn serves);
+    # the first boot also downloads it, hence the long start period.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/healthz', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+      start_period: 300s
 
   # Solna FTP server: authenticates each login against the photographers table,
   # chroots the user into raw/{photographer_id}, and ingests every fully
@@ -68,9 +82,9 @@ services:
       postgres:
         condition: service_healthy
       api:
-        condition: service_started
+        condition: service_healthy   # migrations done
       faceservice:
-        condition: service_started
+        condition: service_healthy   # model loaded
     ports:
       - "2121:21"   # FTP control on host 2121
       - "21100-21110:21100-21110"   # passive data range
