@@ -14,6 +14,7 @@ that same LAN IP so passive-mode data transfers work from a separate device.
 """
 import logging
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -24,6 +25,8 @@ from pyftpdlib.servers import FTPServer
 
 import ingest
 from passwords import verify_password
+
+log = logging.getLogger("ftpserver")
 
 # psycopg wants a plain libpq URL (strip the SQLAlchemy +psycopg dialect tag).
 DATABASE_URL = os.environ["DATABASE_URL"].replace("postgresql+psycopg://", "postgresql://")
@@ -86,35 +89,47 @@ class PhotographerAuthorizer:
         pass
 
 
-def make_handler(authorizer, on_photo):
+def make_handler(authorizer, on_photo, retry_after=60):
     """FTP handler that hands each completely received file to `on_photo`.
 
     pyftpdlib fires on_file_received only once the transfer has finished, so
     a camera pausing mid-upload never yields a half-written photo. Processing
     runs on one background worker so slow ingestion never blocks FTP clients.
+    A photo whose processing raises is queued again after `retry_after` seconds.
     """
     worker = ThreadPoolExecutor(max_workers=1)
 
+    def ingest_photo(path):
+        try:
+            on_photo(path)
+        except Exception:  # noqa: BLE001
+            log.exception("could not ingest %s; retrying in %s s", path, retry_after)
+            threading.Timer(retry_after, submit_photo, (path,)).start()
+
+    def submit_photo(path):
+        worker.submit(ingest_photo, path)
+
     class IngestingHandler(FTPHandler):
         def on_file_received(self, file):
-            worker.submit(on_photo, Path(file))
+            submit_photo(Path(file))
 
     IngestingHandler.authorizer = authorizer
-    IngestingHandler.worker = worker
+    IngestingHandler.submit_photo = staticmethod(submit_photo)
     return IngestingHandler
 
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     handler = make_handler(PhotographerAuthorizer(), ingest.handle_upload)
-    handler.worker.submit(ingest.recover_inbox)  # queued: FTP accepts uploads meanwhile
+    for path in ingest.pending_photos():
+        handler.submit_photo(path)  # queued: FTP accepts uploads meanwhile
     handler.passive_ports = range(PASV_MIN, PASV_MAX + 1)
     if PASV_ADDRESS:
         # Address advertised to clients for passive connections (your LAN IP).
         handler.masquerade_address = PASV_ADDRESS
 
     server = FTPServer(("0.0.0.0", 21), handler)
-    logging.getLogger("ftpserver").info(
+    log.info(
         "listening on :21  passive=%s-%s  masquerade=%s", PASV_MIN, PASV_MAX, PASV_ADDRESS or "(none)"
     )
     server.serve_forever()

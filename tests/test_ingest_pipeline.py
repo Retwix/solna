@@ -189,7 +189,7 @@ def test_a_photo_survives_a_brief_api_outage(monkeypatch, inbox):
 
 def test_the_inbox_keeps_only_photos_not_yet_ingested(monkeypatch, inbox):
     """A registered photo leaves the FTP inbox (storage has it); one the API
-    never accepted stays there to be retried on the next start."""
+    never accepted stays there, and the failure reaches the caller to retry."""
     import ingest
 
     monkeypatch.setattr("time.sleep", lambda seconds: None)
@@ -199,7 +199,8 @@ def test_the_inbox_keeps_only_photos_not_yet_ingested(monkeypatch, inbox):
 
     _fake_backends(monkeypatch, api_down_for=ingest.INGEST_ATTEMPTS)
     stuck = _drop("ph-1", "DSC00201.JPG", _img_bytes((40, 30)))
-    ingest.handle_upload(stuck)
+    with pytest.raises(ingest.requests.ConnectionError):
+        ingest.handle_upload(stuck)
 
     assert not done.exists()
     assert stuck.exists()
@@ -215,7 +216,8 @@ def test_photos_left_in_the_inbox_are_ingested_when_the_server_starts(monkeypatc
     _drop("ph-2", "IMG_0001.png", _img_bytes((40, 30), fmt="PNG"))
     notes = _drop("ph-2", "notes.txt", b"not a photo")
 
-    ingest.recover_inbox()
+    for path in ingest.pending_photos():
+        ingest.handle_upload(path)
 
     assert sorted(p["photographer_id"] for p in ingested) == ["ph-1", "ph-2"]
     assert notes.exists()
@@ -230,7 +232,33 @@ def test_a_photo_retried_after_a_failed_ingest_is_stored_once(monkeypatch, inbox
     storage, _ = _fake_backends(monkeypatch, api_down_for=ingest.INGEST_ATTEMPTS)
     photo = _drop("ph-1", "DSC00400.JPG", _img_bytes((40, 30)))
 
-    ingest.handle_upload(photo)
+    with pytest.raises(ingest.requests.ConnectionError):
+        ingest.handle_upload(photo)
     ingest.handle_upload(photo)
 
     assert len(storage.objects) == 2  # one original, one thumbnail
+
+
+def test_a_photo_whose_ingest_fails_is_retried_without_a_restart(tmp_path):
+    """The API is down past the pipeline's own retries (a redeploy mid-event):
+    the photo is tried again later instead of waiting for the next restart."""
+    import threading
+
+    from pyftpdlib.authorizers import DummyAuthorizer
+
+    import server
+
+    attempts = []
+    done = threading.Event()
+
+    def on_photo(path):
+        attempts.append(path)
+        if len(attempts) == 1:
+            raise ConnectionError("api unreachable")
+        done.set()
+
+    handler = server.make_handler(DummyAuthorizer(), on_photo, retry_after=0.01)
+    handler.submit_photo(tmp_path / "DSC00500.JPG")
+
+    assert done.wait(timeout=5)
+    assert attempts == [tmp_path / "DSC00500.JPG"] * 2

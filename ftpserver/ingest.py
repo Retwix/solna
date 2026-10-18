@@ -142,13 +142,9 @@ def handle_upload(path: Path) -> None:
     """Entry point for each file the FTP server has fully received."""
     if not _is_image(path):
         return
-    try:
-        process_image(path)
-    except Exception:  # noqa: BLE001
-        log.exception("could not ingest %s; it stays in the inbox until the next restart", path)
+    process_image(path)
 
 
-def recover_inbox() -> None:
-    """Ingest photos left in the inbox by a crash or a long API outage."""
-    for path in RAW_ROOT.glob("*/*"):
-        handle_upload(path)
+def pending_photos() -> list[Path]:
+    """Files left in the inbox by a crash or a long API outage."""
+    return sorted(RAW_ROOT.glob("*/*"))
