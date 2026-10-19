@@ -348,3 +348,25 @@ def test_a_photo_that_keeps_failing_is_given_up_after_max_attempts(tmp_path):
     time.sleep(0.3)
     assert len(attempts) == 3
     assert given_up == [tmp_path / "DSC00502.JPG"]
+
+
+def test_a_photo_that_cannot_be_set_aside_is_reported_in_the_log(tmp_path, caplog):
+    """The move to failed/ itself can fail (a permission problem on the
+    volume); the operator must see it, not lose it in a worker thread."""
+    import time
+
+    from pyftpdlib.authorizers import DummyAuthorizer
+
+    import server
+
+    def on_photo(path):
+        raise _api_answer(404)
+
+    def on_give_up(path):
+        raise PermissionError(path)
+
+    handler = server.make_handler(DummyAuthorizer(), on_photo, on_give_up, retry_after=0.01)
+    handler.submit_photo(tmp_path / "DSC00700.JPG")
+
+    time.sleep(0.3)
+    assert any(r.exc_info and r.exc_info[0] is PermissionError for r in caplog.records)

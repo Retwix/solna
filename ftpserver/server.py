@@ -116,7 +116,10 @@ def make_handler(authorizer, on_photo, on_give_up, retry_after=60, max_attempts=
         except Exception as error:  # noqa: BLE001
             if attempt >= max_attempts or not _retry_can_succeed(error):
                 log.exception("could not ingest %s; giving up and setting it aside", path)
-                on_give_up(path)
+                try:
+                    on_give_up(path)
+                except Exception:  # noqa: BLE001
+                    log.exception("could not set %s aside", path)
                 return
             log.exception("could not ingest %s; retrying in %s s", path, retry_after)
             threading.Timer(retry_after, submit_photo, (path, attempt + 1)).start()
