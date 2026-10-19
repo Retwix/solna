@@ -60,6 +60,11 @@ def _photographer_id_from_path(path: Path) -> str | None:
     return parts[0] if len(parts) >= 2 else None
 
 
+def _stored_name(data: bytes, name: str) -> str:
+    """Content-hashed, so a camera reusing a file name never overwrites."""
+    return f"{hashlib.sha256(data).hexdigest()[:32]}-{name}"
+
+
 def _make_thumbnail(data: bytes) -> bytes:
     img = Image.open(io.BytesIO(data))
     img = ImageOps.exif_transpose(img)  # respect camera orientation
@@ -79,7 +84,7 @@ def process_image(path: Path) -> None:
     data = path.read_bytes()
     name = path.name
 
-    stored_name = f"{hashlib.sha256(data).hexdigest()[:32]}-{name}"
+    stored_name = _stored_name(data, name)
     raw_key = f"raw/{photographer_id}/{stored_name}"
     thumb_key = f"thumbs/{photographer_id}/{stored_name}"
 
@@ -152,6 +157,7 @@ def pending_photos() -> list[Path]:
 
 def set_aside(path: Path) -> None:
     """Moves a photo given up on to failed/{photographer_id}/, out of the inbox."""
-    target = RAW_ROOT.parent / "failed" / path.relative_to(RAW_ROOT)
+    photographer_dir = path.parent.relative_to(RAW_ROOT)
+    target = RAW_ROOT.parent / "failed" / photographer_dir / _stored_name(path.read_bytes(), path.name)
     target.parent.mkdir(parents=True, exist_ok=True)
     path.rename(target)
