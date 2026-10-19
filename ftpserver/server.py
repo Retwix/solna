@@ -92,7 +92,7 @@ class PhotographerAuthorizer:
 
 def _retry_can_succeed(error):
     if isinstance(error, requests.HTTPError):
-        return error.response.status_code >= 500
+        return error.response.status_code != 404
     return True
 
 
@@ -103,7 +103,7 @@ def make_handler(authorizer, on_photo, on_give_up, retry_after=60, max_attempts=
     a camera pausing mid-upload never yields a half-written photo. Processing
     runs on one background worker so slow ingestion never blocks FTP clients.
     A photo whose processing raises is queued again after `retry_after` seconds,
-    up to `max_attempts` tries, unless its file is gone or the API rejected it.
+    up to `max_attempts` tries, unless its file is gone or its photographer is.
     A photo given up on (but still there) goes to `on_give_up`.
     """
     worker = ThreadPoolExecutor(max_workers=1)

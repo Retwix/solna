@@ -292,15 +292,16 @@ def _api_answer(status):
     ("failure", "retried", "set_aside"),
     [
         pytest.param(lambda: FileNotFoundError("deleted from the inbox"), False, False, id="file gone"),
-        pytest.param(lambda: _api_answer(499), False, True, id="API rejects the photo"),
+        pytest.param(lambda: _api_answer(404), False, True, id="photographer gone"),
+        pytest.param(lambda: _api_answer(401), True, False, id="ingest key misconfigured"),
         pytest.param(lambda: _api_answer(500), True, False, id="API fails"),
     ],
 )
 def test_a_failed_photo_is_retried_only_when_a_retry_can_succeed(
     tmp_path, failure, retried, set_aside
 ):
-    """A deleted file or a photo the API rejects would fail every minute
-    forever; a server error may clear up, so that photo is tried again.
+    """A deleted file or a photo whose photographer is gone would fail every
+    minute forever; a server or config error may clear up, so it is retried.
     A photo given up on is set aside, unless there is no file left to keep."""
     import time
 
