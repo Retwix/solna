@@ -91,14 +91,12 @@ class PhotographerAuthorizer:
 
 
 def _retry_can_succeed(error):
-    if isinstance(error, FileNotFoundError):
-        return False
     if isinstance(error, requests.HTTPError):
         return error.response.status_code >= 500
     return True
 
 
-def make_handler(authorizer, on_photo, retry_after=60, max_attempts=60):
+def make_handler(authorizer, on_photo, on_give_up, retry_after=60, max_attempts=60):
     """FTP handler that hands each completely received file to `on_photo`.
 
     pyftpdlib fires on_file_received only once the transfer has finished, so
@@ -106,15 +104,19 @@ def make_handler(authorizer, on_photo, retry_after=60, max_attempts=60):
     runs on one background worker so slow ingestion never blocks FTP clients.
     A photo whose processing raises is queued again after `retry_after` seconds,
     up to `max_attempts` tries, unless its file is gone or the API rejected it.
+    A photo given up on (but still there) goes to `on_give_up`.
     """
     worker = ThreadPoolExecutor(max_workers=1)
 
     def ingest_photo(path, attempt):
         try:
             on_photo(path)
+        except FileNotFoundError:
+            log.warning("%s is gone from the inbox; not retrying", path)
         except Exception as error:  # noqa: BLE001
             if attempt >= max_attempts or not _retry_can_succeed(error):
-                log.exception("could not ingest %s; giving up", path)
+                log.exception("could not ingest %s; giving up and setting it aside", path)
+                on_give_up(path)
                 return
             log.exception("could not ingest %s; retrying in %s s", path, retry_after)
             threading.Timer(retry_after, submit_photo, (path, attempt + 1)).start()
@@ -133,7 +135,7 @@ def make_handler(authorizer, on_photo, retry_after=60, max_attempts=60):
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    handler = make_handler(PhotographerAuthorizer(), ingest.handle_upload)
+    handler = make_handler(PhotographerAuthorizer(), ingest.handle_upload, lambda path: None)
     for path in ingest.pending_photos():
         handler.submit_photo(path)  # queued: FTP accepts uploads meanwhile
     handler.passive_ports = range(PASV_MIN, PASV_MAX + 1)

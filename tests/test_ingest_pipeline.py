@@ -73,7 +73,7 @@ def test_a_photo_is_processed_once_its_upload_completes_not_while_it_stalls(tmp_
         received.append((path.name, path.read_bytes()))
         done.set()
 
-    ftpd = FTPServer(("127.0.0.1", 0), server.make_handler(authorizer, on_photo))
+    ftpd = FTPServer(("127.0.0.1", 0), server.make_handler(authorizer, on_photo, lambda path: None))
     stop = threading.Event()
 
     def serve():
@@ -257,7 +257,7 @@ def test_a_photo_whose_ingest_fails_is_retried_without_a_restart(tmp_path):
             raise ConnectionError("api unreachable")
         done.set()
 
-    handler = server.make_handler(DummyAuthorizer(), on_photo, retry_after=0.01)
+    handler = server.make_handler(DummyAuthorizer(), on_photo, lambda path: None, retry_after=0.01)
     handler.submit_photo(tmp_path / "DSC00500.JPG")
 
     assert done.wait(timeout=5)
@@ -274,16 +274,19 @@ def _api_answer(status):
 
 
 @pytest.mark.parametrize(
-    ("failure", "retried"),
+    ("failure", "retried", "set_aside"),
     [
-        pytest.param(lambda: FileNotFoundError("deleted from the inbox"), False, id="file gone"),
-        pytest.param(lambda: _api_answer(499), False, id="API rejects the photo"),
-        pytest.param(lambda: _api_answer(500), True, id="API fails"),
+        pytest.param(lambda: FileNotFoundError("deleted from the inbox"), False, False, id="file gone"),
+        pytest.param(lambda: _api_answer(499), False, True, id="API rejects the photo"),
+        pytest.param(lambda: _api_answer(500), True, False, id="API fails"),
     ],
 )
-def test_a_failed_photo_is_retried_only_when_a_retry_can_succeed(tmp_path, failure, retried):
+def test_a_failed_photo_is_retried_only_when_a_retry_can_succeed(
+    tmp_path, failure, retried, set_aside
+):
     """A deleted file or a photo the API rejects would fail every minute
-    forever; a server error may clear up, so that photo is tried again."""
+    forever; a server error may clear up, so that photo is tried again.
+    A photo given up on is set aside, unless there is no file left to keep."""
     import time
 
     from pyftpdlib.authorizers import DummyAuthorizer
@@ -297,11 +300,13 @@ def test_a_failed_photo_is_retried_only_when_a_retry_can_succeed(tmp_path, failu
         if len(attempts) <= 2:
             raise failure()
 
-    handler = server.make_handler(DummyAuthorizer(), on_photo, retry_after=0.01)
+    given_up = []
+    handler = server.make_handler(DummyAuthorizer(), on_photo, given_up.append, retry_after=0.01)
     handler.submit_photo(tmp_path / "DSC00501.JPG")
 
     time.sleep(0.3)
     assert (len(attempts) > 1) is retried
+    assert given_up == ([tmp_path / "DSC00501.JPG"] if set_aside else [])
 
 
 def test_a_photo_that_keeps_failing_is_given_up_after_max_attempts(tmp_path):
@@ -318,8 +323,12 @@ def test_a_photo_that_keeps_failing_is_given_up_after_max_attempts(tmp_path):
         attempts.append(path)
         raise ConnectionError("api unreachable")
 
-    handler = server.make_handler(DummyAuthorizer(), on_photo, retry_after=0.01, max_attempts=3)
+    given_up = []
+    handler = server.make_handler(
+        DummyAuthorizer(), on_photo, given_up.append, retry_after=0.01, max_attempts=3
+    )
     handler.submit_photo(tmp_path / "DSC00502.JPG")
 
     time.sleep(0.3)
     assert len(attempts) == 3
+    assert given_up == [tmp_path / "DSC00502.JPG"]
