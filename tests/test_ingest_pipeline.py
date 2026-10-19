@@ -225,18 +225,18 @@ def test_photos_left_in_the_inbox_are_ingested_when_the_server_starts(monkeypatc
 
 
 def test_a_photo_set_aside_leaves_the_inbox_but_is_kept_for_the_operator(inbox):
-    """A photo given up on must not be retried at every restart, yet it is
-    the photographer's work: it moves to failed/, per account, untouched,
-    even when the camera reused the name of an earlier failed photo."""
+    """A photo given up on leaves the inbox, yet it is the photographer's
+    work: it moves to failed/, per account, untouched, even when the camera
+    reused the name of an earlier failed photo."""
     import ingest
 
     ingest.set_aside(_drop("ph-1", "DSC00600.JPG", b"first shot"))
     ingest.set_aside(_drop("ph-1", "DSC00600.JPG", b"second shot"))
 
-    assert ingest.pending_photos() == []
-    kept = list((ingest.RAW_ROOT.parent / "failed" / "ph-1").iterdir())
+    assert list(ingest.RAW_ROOT.glob("*/*")) == []
+    kept = list((ingest.RAW_ROOT.parent / "failed" / "ph-1").glob("*/*"))
     assert sorted(p.read_bytes() for p in kept) == [b"first shot", b"second shot"]
-    assert all(p.name.endswith("-DSC00600.JPG") for p in kept)
+    assert {p.name for p in kept} == {"DSC00600.JPG"}
 
 def test_a_photo_retried_after_a_failed_ingest_is_stored_once(monkeypatch, inbox):
     """Every retry uploads the original again; it must land on the same object,
@@ -253,6 +253,27 @@ def test_a_photo_retried_after_a_failed_ingest_is_stored_once(monkeypatch, inbox
 
     assert len(storage.objects) == 2  # one original, one thumbnail
 
+
+
+def test_a_set_aside_photo_is_ingested_at_the_next_restart_on_the_same_object(monkeypatch, inbox):
+    """After an outage past the retry cap, restarting the FTP server is the
+    recovery: set-aside photos are tried again and land where their first
+    attempt already uploaded them, leaving no orphan copy behind."""
+    import ingest
+
+    monkeypatch.setattr("time.sleep", lambda seconds: None)
+    storage, ingested = _fake_backends(monkeypatch, api_down_for=ingest.INGEST_ATTEMPTS)
+    photo = _drop("ph-1", "DSC00800.JPG", _img_bytes((40, 30)))
+    with pytest.raises(ingest.requests.ConnectionError):
+        ingest.handle_upload(photo)
+    ingest.set_aside(photo)
+
+    for path in ingest.pending_photos():
+        ingest.handle_upload(path)
+
+    assert [p["photographer_id"] for p in ingested] == ["ph-1"]
+    assert len(storage.objects) == 2  # one original, one thumbnail
+    assert ingest.pending_photos() == []
 
 def test_a_photo_whose_ingest_fails_is_retried_without_a_restart(tmp_path):
     """The API is down past the pipeline's own retries (a redeploy mid-event):

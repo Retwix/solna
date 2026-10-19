@@ -50,19 +50,22 @@ s3 = boto3.client(
 )
 
 
+def _failed_root() -> Path:
+    return RAW_ROOT.parent / "failed"
+
+
 def _photographer_id_from_path(path: Path) -> str | None:
-    """raw/{photographer_id}/<file> -> photographer_id"""
-    try:
-        rel = path.relative_to(RAW_ROOT)
-    except ValueError:
-        return None
-    parts = rel.parts
-    return parts[0] if len(parts) >= 2 else None
+    """raw/{photographer_id}/<file> or failed/{photographer_id}/... -> photographer_id"""
+    for root in (RAW_ROOT, _failed_root()):
+        if path.is_relative_to(root):
+            parts = path.relative_to(root).parts
+            return parts[0] if len(parts) >= 2 else None
+    return None
 
 
-def _stored_name(data: bytes, name: str) -> str:
-    """Content-hashed, so a camera reusing a file name never overwrites."""
-    return f"{hashlib.sha256(data).hexdigest()[:32]}-{name}"
+def _content_hash(data: bytes) -> str:
+    """Names stored copies, so a camera reusing a file name never overwrites."""
+    return hashlib.sha256(data).hexdigest()[:32]
 
 
 def _make_thumbnail(data: bytes) -> bytes:
@@ -84,7 +87,7 @@ def process_image(path: Path) -> None:
     data = path.read_bytes()
     name = path.name
 
-    stored_name = _stored_name(data, name)
+    stored_name = f"{_content_hash(data)}-{name}"
     raw_key = f"raw/{photographer_id}/{stored_name}"
     thumb_key = f"thumbs/{photographer_id}/{stored_name}"
 
@@ -151,13 +154,14 @@ def handle_upload(path: Path) -> None:
 
 
 def pending_photos() -> list[Path]:
-    """Files left in the inbox by a crash or a long API outage."""
-    return sorted(RAW_ROOT.glob("*/*"))
+    """Files left in the inbox by a crash, then those set aside after an outage."""
+    return sorted(RAW_ROOT.glob("*/*")) + sorted(_failed_root().glob("*/*/*"))
 
 
 def set_aside(path: Path) -> None:
-    """Moves a photo given up on to failed/{photographer_id}/, out of the inbox."""
-    photographer_dir = path.parent.relative_to(RAW_ROOT)
-    target = RAW_ROOT.parent / "failed" / photographer_dir / _stored_name(path.read_bytes(), path.name)
+    """Moves a photo given up on to failed/{photographer_id}/<hash>/<name>.
+
+    It leaves the inbox, so it is not retried until the next restart."""
+    target = _failed_root() / _photographer_id_from_path(path) / _content_hash(path.read_bytes()) / path.name
     target.parent.mkdir(parents=True, exist_ok=True)
     path.rename(target)
