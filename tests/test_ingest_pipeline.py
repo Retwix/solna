@@ -302,3 +302,24 @@ def test_a_failed_photo_is_retried_only_when_a_retry_can_succeed(tmp_path, failu
 
     time.sleep(0.3)
     assert (len(attempts) > 1) is retried
+
+
+def test_a_photo_that_keeps_failing_is_given_up_after_max_attempts(tmp_path):
+    """An API that never comes back must not keep the server retrying forever."""
+    import time
+
+    from pyftpdlib.authorizers import DummyAuthorizer
+
+    import server
+
+    attempts = []
+
+    def on_photo(path):
+        attempts.append(path)
+        raise ConnectionError("api unreachable")
+
+    handler = server.make_handler(DummyAuthorizer(), on_photo, retry_after=0.01, max_attempts=3)
+    handler.submit_photo(tmp_path / "DSC00502.JPG")
+
+    time.sleep(0.3)
+    assert len(attempts) == 3

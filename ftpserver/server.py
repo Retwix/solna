@@ -98,29 +98,29 @@ def _retry_can_succeed(error):
     return True
 
 
-def make_handler(authorizer, on_photo, retry_after=60):
+def make_handler(authorizer, on_photo, retry_after=60, max_attempts=60):
     """FTP handler that hands each completely received file to `on_photo`.
 
     pyftpdlib fires on_file_received only once the transfer has finished, so
     a camera pausing mid-upload never yields a half-written photo. Processing
     runs on one background worker so slow ingestion never blocks FTP clients.
     A photo whose processing raises is queued again after `retry_after` seconds,
-    unless its file is gone or the API rejected it.
+    up to `max_attempts` tries, unless its file is gone or the API rejected it.
     """
     worker = ThreadPoolExecutor(max_workers=1)
 
-    def ingest_photo(path):
+    def ingest_photo(path, attempt):
         try:
             on_photo(path)
         except Exception as error:  # noqa: BLE001
-            if not _retry_can_succeed(error):
+            if attempt >= max_attempts or not _retry_can_succeed(error):
                 log.exception("could not ingest %s; giving up", path)
                 return
             log.exception("could not ingest %s; retrying in %s s", path, retry_after)
-            threading.Timer(retry_after, submit_photo, (path,)).start()
+            threading.Timer(retry_after, submit_photo, (path, attempt + 1)).start()
 
-    def submit_photo(path):
-        worker.submit(ingest_photo, path)
+    def submit_photo(path, attempt=1):
+        worker.submit(ingest_photo, path, attempt)
 
     class IngestingHandler(FTPHandler):
         def on_file_received(self, file):
