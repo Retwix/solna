@@ -135,7 +135,7 @@ def make_handler(authorizer, on_photo, on_give_up, retry_after=60, max_attempts=
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    handler = make_handler(PhotographerAuthorizer(), ingest.handle_upload, lambda path: None)
+    handler = make_handler(PhotographerAuthorizer(), ingest.handle_upload, ingest.set_aside)
     for path in ingest.pending_photos():
         handler.submit_photo(path)  # queued: FTP accepts uploads meanwhile
     handler.passive_ports = range(PASV_MIN, PASV_MAX + 1)

@@ -223,6 +223,19 @@ def test_photos_left_in_the_inbox_are_ingested_when_the_server_starts(monkeypatc
     assert notes.exists()
 
 
+
+def test_a_photo_set_aside_leaves_the_inbox_but_is_kept_for_the_operator(inbox):
+    """A photo given up on must not be retried at every restart, yet it is
+    the photographer's work: it moves to failed/, per account, untouched."""
+    import ingest
+
+    photo = _drop("ph-1", "DSC00600.JPG", b"original bytes")
+
+    ingest.set_aside(photo)
+
+    assert ingest.pending_photos() == []
+    assert (ingest.RAW_ROOT.parent / "failed" / "ph-1" / "DSC00600.JPG").read_bytes() == b"original bytes"
+
 def test_a_photo_retried_after_a_failed_ingest_is_stored_once(monkeypatch, inbox):
     """Every retry uploads the original again; it must land on the same object,
     not leave an orphan copy per attempt."""

@@ -148,3 +148,10 @@ def handle_upload(path: Path) -> None:
 def pending_photos() -> list[Path]:
     """Files left in the inbox by a crash or a long API outage."""
     return sorted(RAW_ROOT.glob("*/*"))
+
+
+def set_aside(path: Path) -> None:
+    """Moves a photo given up on to failed/{photographer_id}/, out of the inbox."""
+    target = RAW_ROOT.parent / "failed" / path.relative_to(RAW_ROOT)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    path.rename(target)
